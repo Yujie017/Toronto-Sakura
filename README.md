@@ -24,7 +24,7 @@ Instead of dropping a single point per location, each site is outlined as a **po
 
 **Satellite toggle** — Switch between street map and satellite imagery to scout the terrain before visiting.
 
-**Drop a pin** — Long-press anywhere on the map (or right-click on desktop) to copy coordinates and open the spot in any maps app.
+**DROP A PIN** — Tap the button in the site panel, or long-press anywhere on the map (right-click on desktop), to copy coordinates and open the spot in any maps app.
 
 **Report a sighting** — Spotted a tree blooming or noticed a closure? Submit via the Report button; sightings are reviewed and added to the map.
 
@@ -60,4 +60,4 @@ Pink shaded areas are approximate outlines, not precise tree locations. Trees ma
 
 Data collection, mapping, and design by Yujie Chen. Website built with assistance from AI tools.
 
-2026 sightings sourced from publicly shared photos and posts. Many thanks to the Toronto cherry blossom community.
+Viewing area boundaries and 2026 bloom sightings are both based on publicly available photos, posts, satellite imagery, and community trackers. Many thanks to the Toronto cherry blossom community.

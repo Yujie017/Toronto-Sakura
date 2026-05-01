@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Toronto Sakura · A field map by Yujie Chen</title>
-<meta name="description" content="An interactive field map of cherry blossoms in Toronto. Polygons drawn from official sources, satellite imagery, street view, and on-the-ground photos." />
+<meta name="description" content="An interactive field map of cherry blossoms in Toronto. Viewing areas drawn from official sources, satellite imagery, street view, and on-the-ground photos." />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -1072,7 +1072,7 @@
     <li><strong>Bloom forecast and 2026 sightings.</strong> Each site shows a typical 2-week bloom window, derived from about 20 years of peak-bloom records at High Park Nature Centre, adjusted for site-specific conditions and 2026 sighting reports.</li>
     <li>The 2026 timeline marks each reported sighting as a dot: pink for days the trees were seen in bloom, gray for bud or fallen petal sightings. Hover any dot to see the date and source. Sightings come from publicly shared photos and posts, and you can submit your own through the Report button.</li>
     <li><strong>Where to see and accessibility info</strong>, drawn from public sources.</li>
-    <li><strong>Drop a pin (long-press anywhere)</strong> to copy that spot's coordinates and open it in Google Maps, Apple Maps, or any maps app.</li>
+    <li><strong>DROP A PIN</strong> — tap the button in the Where to see section, or long-press anywhere on the map, to copy coordinates and open the spot in Google Maps, Apple Maps, or any maps app.</li>
     <li><strong>Report a sighting or issue.</strong> Spotted a tree blooming, or noticed a closure or access problem? Submit through the Report button in the panel and I'll add it to the map.</li>
   </ul>
 
@@ -1098,7 +1098,7 @@
   <p style="font-size: 14px;">Data collection, mapping, and design are by Yujie Chen. Website built with assistance from AI tools.<br/>
   Site descriptions and tree counts adapted from the <a href="https://www.toronto.ca/explore-enjoy/festivals-events/cherry-blossoms/" target="_blank" rel="noopener">City of Toronto cherry blossoms page</a>.<br/>
   Bloom timing references include the <a href="https://highparknaturecentre.com/cherry-blossom-tracking/" target="_blank" rel="noopener">High Park Nature Centre cherry blossom tracker</a>.<br/>
-  The 2026 sightings on this map come from photos, posts, and trackers shared publicly online. Many thanks to the Toronto cherry blossom community for making this possible.<br/>
+  Viewing area boundaries and 2026 bloom sightings are both based on publicly available photos, posts, satellite imagery, and community trackers. Many thanks to the Toronto cherry blossom community for making this possible.<br/>
   Basemap: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors and <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>; satellite imagery © <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a> and partners.</p>
 
   </div>
@@ -1640,7 +1640,7 @@
       </div>
       <div style="font-size: 11px; color: var(--mist); margin-top: 4px; font-style: italic;">Hover any dot for date and source.</div>
       <div class="timeline-disclaimer">
-        The gray band shows a typical 2-week bloom window, based on ~20 years of peak bloom records at High Park and adjusted for site-specific conditions. Pink dots are real 2026 sightings and grow as more reports come in.
+        The gray band shows a typical 2-week bloom window, based on ~20 years of peak bloom records at High Park and adjusted for site-specific conditions. Dots are real 2026 sightings, updated periodically as new reports come in.
       </div>
     `;
   }
@@ -1693,14 +1693,14 @@
       : 'The pink area shows the approximate extent. Location is based on publicly available information.';
     const whereParas = [];
     if (whereDesc) whereParas.push(escapeHtml(whereDesc) + ' ' + extentLine);
-    // Long-press hint + an inline "Drop a pin" pill button (no big bottom button anymore)
+    // Long-press hint + an inline "DROP A PIN" pill button (no big bottom button anymore)
     whereParas.push(
       `<span style="display:inline-flex;flex-wrap:wrap;align-items:center;gap:8px;">` +
-        `Long-press anywhere on the pink area to copy that exact spot's coordinates.` +
+        `Tap DROP A PIN to mark a spot and copy its coordinates, or long-press anywhere on the pink area directly.` +
         `<button class="ig-report-btn" id="btn-pick-${p.fid}" title="Tap a spot on the map to copy its coordinates">` +
           `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;">` +
             `<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>` +
-          `</svg>Drop a pin` +
+          `</svg>DROP A PIN` +
         `</button>` +
         `<button class="ig-report-btn" id="btn-accuracy-${p.fid}" title="Report a location inaccuracy">` +
           `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;">` +
@@ -1765,7 +1765,7 @@
 
         ${accessHtml}
 
-        <!-- Drop a pin button moved inline into the Where to see section above -->
+        <!-- DROP A PIN button moved inline into the Where to see section above -->
 
 
         <div class="source-line" style="text-align: center;">© 2026 Yujie Chen</div>
