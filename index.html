@@ -1,0 +1,2232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Toronto Sakura · A field map by Yujie Chen</title>
+<meta name="description" content="An interactive field map of cherry blossoms in Toronto. Polygons drawn from official sources, satellite imagery, street view, and on-the-ground photos." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<style>
+  :root {
+    --sakura-50:  #FFF5F7;
+    --sakura-100: #FBE3E9;
+    --sakura-200: #F5C6D2;
+    --sakura-300: #E89BAE;
+    --sakura-500: #B8587A;
+    --sakura-700: #7A2E48;
+    --ink:        #2A1F26;
+    --ink-soft:   #5C4A53;
+    --paper:      #FAF7F5;
+    --mist:       #BDA9AF;
+    --line:       #ECDCE1;
+    --warn-bg:    #FFF1DB;
+    --warn-fg:    #8A5A14;
+    --warn-border:#F0CB8B;
+    --shadow:     0 4px 20px rgba(122,46,72,0.08);
+    --shadow-lg:  0 12px 40px rgba(122,46,72,0.16);
+
+    /* Font sizing — 16px base, slightly larger throughout */
+    --fs-body: 16px;
+    --fs-small: 14px;
+    --fs-tiny: 12px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    color: var(--ink);
+    background: var(--paper);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    font-size: var(--fs-body);
+    line-height: 1.55;
+  }
+  #map { position: absolute; inset: 0; background: var(--sakura-50); }
+
+  /* Header — brand pill only */
+  .header {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    pointer-events: none;
+  }
+
+  /* Right-side vertical toolbar — separate from header */
+  .right-toolbar {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: center;
+  }
+  @media (max-width: 767px) {
+    .right-toolbar {
+      flex-direction: column;
+      top: 16px;
+      right: 16px;
+      gap: 6px;
+    }
+    .icon-btn {
+      width: 38px; height: 38px;
+    }
+    .icon-btn svg { width: 18px; height: 18px; }
+  }
+  .brand {
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(255,255,255,0.94);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    padding: 11px 18px;
+    border-radius: 999px;
+    box-shadow: var(--shadow);
+    border: 1px solid var(--line);
+  }
+  .brand-mark { width: 28px; height: 28px; flex-shrink: 0; }
+  .brand-text { display: flex; flex-direction: column; line-height: 1.1; }
+  .brand-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 600;
+    font-size: 22px;
+    color: var(--sakura-700);
+    letter-spacing: 0.01em;
+  }
+  .brand-sub {
+    font-size: 11px;
+    color: var(--ink-soft);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+  .icon-btn {
+    pointer-events: auto;
+    width: 46px; height: 46px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.94);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    color: var(--sakura-700);
+    transition: transform .15s ease, background .15s ease;
+  }
+  .icon-btn:hover { transform: translateY(-1px); background: white; }
+  .icon-btn svg { width: 22px; height: 22px; }
+  .icon-btn.active { background: var(--sakura-500); color: white; }
+  /* Visible label tooltip on hover (desktop) */
+  .icon-btn { position: relative; }
+  .icon-btn::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    top: 50%;
+    right: calc(100% + 10px);
+    transform: translateY(-50%) translateX(4px);
+    background: rgba(42,31,38,0.92);
+    color: white;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .15s, transform .15s;
+    z-index: 1100;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+  }
+  .icon-btn:hover::after { opacity: 1; transform: translateY(-50%) translateX(0); }
+  /* ALL button — text instead of an SVG icon */
+  .icon-btn-all span {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--sakura-700);
+    line-height: 1;
+  }
+  .icon-btn-all.active { color: white; }
+  .icon-btn-all.active span { color: white; }
+  @media (hover: none) { .icon-btn::after { display: none; } }
+
+  /* Panels */
+  .panel {
+    position: absolute;
+    z-index: 900;
+    background: white;
+    box-shadow: var(--shadow-lg);
+    transition: transform .3s cubic-bezier(.2,.7,.2,1);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  #panel-detail-content,
+  #panel-nearby-content {
+    flex: 1;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  /* Desktop: left panel = detail; right panel = nearest sites */
+  @media (min-width: 768px) {
+    .panel.detail {
+      top: 80px;
+      left: 16px;
+      width: 380px;
+      max-height: calc(100vh - 100px);
+      border-radius: 18px;
+      transform: translateX(calc(-100% - 32px));
+      border: 1px solid var(--line);
+    }
+    .panel.detail.open { transform: translateX(0); }
+    .panel.nearby {
+      top: 80px;
+      right: 70px;          /* clear the 46px toolbar + 8px gap + 16px edge */
+      width: 310px;
+      max-height: calc(100vh - 240px); /* leave room for the legend pill below */
+      border-radius: 18px;
+      transform: translateX(calc(100% + 86px));
+      border: 1px solid var(--line);
+    }
+    .panel.nearby.open { transform: translateX(0); }
+  }
+  /* Mobile: bottom-sheet that takes the lower half of the screen.
+     The map naturally stays in the upper half. Swipe down (no X) to close. */
+  @media (max-width: 767px) {
+    .panel {
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 50vh;
+      max-height: 50vh;
+      border-radius: 22px 22px 0 0;
+      transform: translateY(100%);
+      padding-bottom: env(safe-area-inset-bottom);
+      touch-action: none;  /* allow custom swipe-down handling */
+    }
+    .panel.open { transform: translateY(0); }
+    .panel::before {
+      content: '';
+      display: block;
+      width: 44px; height: 4px;
+      background: var(--sakura-200);
+      border-radius: 2px;
+      margin: 10px auto 8px;
+    }
+    /* Hide the X close button on the bottom-sheet panels (not modals) — swipe down is the close gesture */
+    .panel.detail .panel-close,
+    .panel.nearby .panel-close { display: none !important; }
+    /* If both panels are open, only one shows (nearby takes precedence) */
+    .panel.nearby.open ~ .panel.detail.open { transform: translateY(100%); }
+  }
+
+  .panel-close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    border: 0;
+    background: var(--sakura-50);
+    color: var(--sakura-700);
+    cursor: pointer;
+    font-size: 19px;
+    line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .15s;
+  }
+  .panel-close:hover { background: var(--sakura-100); }
+
+  .panel-content { padding: 28px 24px 26px; }
+
+  /* Detail panel content */
+  .site-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 30px;
+    font-weight: 600;
+    color: var(--sakura-700);
+    margin: 0 0 4px;
+    line-height: 1.2;
+    padding-right: 40px;
+  }
+  .site-address {
+    color: var(--ink-soft);
+    font-size: var(--fs-small);
+    margin: 0 0 18px;
+  }
+
+  .alert {
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-border);
+    border-left: 3px solid var(--warn-fg);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .alert-icon {
+    width: 20px; height: 20px;
+    color: var(--warn-fg);
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .alert-body strong {
+    color: var(--warn-fg);
+    display: block;
+    margin-bottom: 2px;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .section { margin-top: 22px; }
+  .section h3 {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--mist);
+    margin: 0 0 10px;
+  }
+  /* Unified body type for the left detail panel — 15px / 1.65, left-aligned. */
+  .panel.detail .section p,
+  .panel.detail .alert-body,
+  .panel.detail .ig-block p {
+    margin: 0 0 8px;
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--ink);
+    text-align: left;
+  }
+  .panel.detail .alert-body { color: var(--warn-fg); }
+
+  /* Bloom forecast */
+  .bloom-block {
+    background: var(--sakura-50);
+    border-radius: 14px;
+    padding: 14px 16px 14px;
+    margin-top: 4px;
+  }
+  .bloom-block .row1 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .bloom-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--fs-small);
+    font-weight: 600;
+  }
+  .bloom-status .label { color: var(--sakura-700); }
+  .timeline-svg { width: 100%; height: 60px; display: block; }
+  .timeline-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--ink-soft);
+    line-height: 1.3;
+  }
+  .timeline-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .timeline-swatch {
+    display: inline-block;
+    width: 14px; height: 8px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .timeline-today-label {
+    font-size: 12px;
+    color: var(--ink);
+    margin-top: 2px;
+    text-align: center;
+  }
+  .timeline-disclaimer {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--line);
+    font-size: 11.5px;
+    color: var(--mist);
+    line-height: 1.5;
+    font-style: italic;
+  }
+
+  /* IG findings */
+  .ig-block {
+    margin-top: 14px;
+    background: white;
+    border: 1.5px solid var(--sakura-300);
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .ig-block h4 {
+    margin: 0 0 6px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--sakura-700);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .ig-block h4 svg { width: 14px; height: 14px; }
+  .ig-block p { margin: 0; }
+  .ig-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+  .ig-header h4 { margin: 0; }
+  .ig-report-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: white;
+    border: 1px solid var(--sakura-200);
+    color: var(--sakura-700);
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background .12s, border-color .12s;
+  }
+  .ig-report-btn:hover { background: var(--sakura-50); border-color: var(--sakura-500); }
+  .ig-report-btn svg { width: 11px; height: 11px; }
+
+  /* Footnote refs */
+  sup.ref {
+    font-size: 0.75em;
+    color: var(--sakura-700);
+    cursor: pointer;
+    margin-left: 1px;
+    font-weight: 600;
+  }
+  sup.ref:hover { text-decoration: underline; }
+  .references-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    counter-reset: ref;
+  }
+  .references-list li {
+    counter-increment: ref;
+    font-size: var(--fs-small);
+    line-height: 1.5;
+    color: var(--ink-soft);
+    padding-left: 22px;
+    position: relative;
+    margin-bottom: 6px;
+  }
+  .references-list li::before {
+    content: counter(ref);
+    position: absolute;
+    left: 0;
+    top: 0;
+    color: var(--sakura-500);
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .references-list a {
+    color: var(--sakura-700);
+    text-decoration: none;
+    border-bottom: 1px solid var(--sakura-200);
+  }
+  .references-list a:hover { border-color: var(--sakura-700); }
+
+  /* Confidence tag (next to "Where to see" header) */
+  .confidence-tag {
+    display: inline-block;
+    margin-left: 8px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 999px;
+    vertical-align: middle;
+    line-height: 1.4;
+  }
+  .confidence-tag.high   { background: var(--sakura-500); color: white;             border: 1px solid var(--sakura-500); }
+  .confidence-tag.medium { background: var(--sakura-100); color: var(--sakura-700); border: 1px solid var(--sakura-200); }
+  .confidence-tag.low    { background: #F0F0F0;           color: #888;               border: 1px solid #DDD; }
+
+  /* Alert source line */
+  .alert-source {
+    margin-top: 6px;
+    font-size: 11.5px;
+    color: var(--warn-fg);
+    opacity: 0.78;
+    font-style: italic;
+  }
+
+  /* Action buttons */
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 22px;
+  }
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--sakura-500);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 999px;
+    text-decoration: none;
+    font-size: var(--fs-small);
+    font-weight: 500;
+    border: 0;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  .btn-primary:hover { background: var(--sakura-700); }
+  .btn-primary svg { width: 16px; height: 16px; }
+  .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: white;
+    color: var(--sakura-700);
+    padding: 11px 18px;
+    border-radius: 999px;
+    border: 1px solid var(--sakura-200);
+    font-size: var(--fs-small);
+    font-weight: 500;
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+  .btn-secondary:hover { background: var(--sakura-50); border-color: var(--sakura-500); }
+  .btn-secondary svg { width: 14px; height: 14px; }
+
+  .source-line {
+    margin-top: 22px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+    font-size: 12px;
+    color: var(--mist);
+    line-height: 1.5;
+  }
+
+  /* Nearby panel */
+  .nearby-header {
+    background: var(--sakura-50);
+    padding: 18px 22px 14px;
+    border-bottom: 1px solid var(--line);
+    border-radius: 18px 18px 0 0;
+  }
+  .nearby-header h3 {
+    margin: 0 0 4px;
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 600;
+    color: var(--sakura-700);
+    font-size: 22px;
+  }
+  .nearby-header .sub {
+    color: var(--ink-soft);
+    font-size: 13px;
+  }
+  .find-me-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 10px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--sakura-200);
+    background: white;
+    color: var(--sakura-700);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+  .find-me-btn:hover { background: var(--sakura-50); border-color: var(--sakura-500); }
+  .sort-toggle {
+    display: inline-flex;
+    margin-top: 10px;
+    margin-left: 8px;
+    border-radius: 999px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    background: white;
+  }
+  .sort-toggle button {
+    border: 0;
+    background: transparent;
+    color: var(--ink-soft);
+    font-size: 12px;
+    font-weight: 500;
+    padding: 7px 12px;
+    cursor: pointer;
+    transition: background .12s, color .12s;
+  }
+  .sort-toggle button:hover:not(:disabled) { background: var(--sakura-50); color: var(--sakura-700); }
+  .sort-toggle button.active { background: var(--sakura-500); color: white; }
+  .sort-toggle button:disabled { color: var(--mist); cursor: not-allowed; opacity: 0.6; }
+  .nearby-list {
+    list-style: none;
+    padding: 4px 0;
+    margin: 0;
+  }
+  .nearby-list li {
+    padding: 14px 22px;
+    border-bottom: 1px solid var(--line);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    transition: background .12s;
+  }
+  .nearby-list li:hover { background: var(--sakura-50); }
+  .nearby-list li:last-child { border-bottom: 0; }
+  .nearby-list .left {
+    display: flex; align-items: center; gap: 10px;
+    min-width: 0; flex: 1;
+  }
+  .nearby-name {
+    font-size: var(--fs-small);
+    color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .nearby-dist {
+    font-size: var(--fs-tiny);
+    color: var(--sakura-700);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+  }
+
+  /* All Sites button — sits below the brand logo */
+  .nearby-pill {
+    position: absolute;
+    top: 80px;           /* logo pill is ~64px tall + 16px top + gap */
+    left: 16px;
+    z-index: 1000;
+    display: none;       /* shown/hidden by JS */
+    align-items: center;
+    justify-content: center;
+    padding: 0 16px;
+    height: 36px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.94);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow);
+    cursor: pointer;
+    color: var(--sakura-700);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    transition: background .15s, box-shadow .15s;
+  }
+  .nearby-pill:hover { background: white; box-shadow: 0 4px 16px rgba(0,0,0,.13); }
+
+  /* Legend — vertical pill at bottom-right, the right Sakura Sites panel ends above it */
+  .legend {
+    position: absolute;
+    bottom: 20px;
+    right: 16px;
+    z-index: 800;
+    background: rgba(255,255,255,0.94);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 10px 14px;
+    box-shadow: var(--shadow);
+    font-size: 12.5px;
+    transition: opacity .2s;
+  }
+  .legend h4 {
+    margin: 0 0 6px;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--mist);
+    font-weight: 600;
+  }
+  .legend-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--ink-soft);
+    margin: 3px 0;
+  }
+  .legend-row svg { width: 22px; height: 22px; flex-shrink: 0; }
+  @media (max-width: 767px) {
+    .legend {
+      bottom: 84px;
+      right: 16px;
+      padding: 8px 11px;
+      font-size: 11.5px;
+    }
+    .legend h4 { margin-bottom: 4px; font-size: 9px; }
+    .legend-row { margin: 0; gap: 5px; }
+    .legend-row svg { width: 16px; height: 16px; }
+  }
+  .legend.hidden { opacity: 0; pointer-events: none; transform: scale(0.92); }
+  .legend h4 {
+    margin: 0 0 8px;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--mist);
+    font-weight: 600;
+  }
+  .legend-row {
+    display: flex; align-items: center; gap: 8px;
+    margin: 5px 0;
+    color: var(--ink-soft);
+  }
+  .legend-row svg { width: 22px; height: 22px; flex-shrink: 0; }
+
+  /* Toast / Tooltip / Modal */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--ink);
+    color: white;
+    padding: 10px 16px;
+    border-radius: 999px;
+    font-size: 13px;
+    z-index: 2000;
+    opacity: 0;
+    transition: opacity .2s, transform .2s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .bloom-tip {
+    position: fixed;
+    background: rgba(42,31,38,0.92);
+    color: white;
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    pointer-events: none;
+    z-index: 1100;
+    opacity: 0;
+    white-space: nowrap;
+    transition: opacity .08s;
+  }
+  .bloom-tip.show { opacity: 1; }
+  .bloom-dot { cursor: help; transition: r .15s; }
+  .bloom-dot:hover { r: 5.2; }
+
+  .modal-bg {
+    position: fixed; inset: 0;
+    background: rgba(42,31,38,0.5);
+    z-index: 1500;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s;
+  }
+  .modal-bg.open { opacity: 1; pointer-events: auto; }
+  .modal {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%) scale(0.96);
+    background: var(--paper);
+    border-radius: 20px;
+    padding: 0;
+    max-width: 520px;
+    width: calc(100vw - 32px);
+    max-height: 80vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-lg);
+    z-index: 1501;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s, transform .2s;
+  }
+  .modal-close-bar {
+    flex-shrink: 0;
+    display: flex;
+    justify-content: flex-end;
+    padding: 12px 14px 0;
+  }
+  .modal-close-bar .panel-close {
+    position: static;
+    flex-shrink: 0;
+  }
+  .modal-body {
+    flex: 1;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 4px 30px 26px;
+  }
+  .modal.open { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%) scale(1); }
+  .modal h2 {
+    font-family: 'Cormorant Garamond', serif;
+    color: var(--sakura-700);
+    margin: 0 0 4px;
+    font-size: 30px;
+  }
+  .modal h3 {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--mist);
+    margin: 22px 0 8px;
+  }
+  .modal p {
+    font-size: var(--fs-body);
+    line-height: 1.65;
+    color: var(--ink);
+    margin: 0 0 10px;
+  }
+  .modal a { color: var(--sakura-700); }
+  /* Form fields inside modals */
+  .field {
+    display: block;
+    margin-bottom: 12px;
+  }
+  .field > span {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--mist);
+    margin-bottom: 4px;
+  }
+  .field input, .field select, .field textarea {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--ink);
+    background: white;
+    box-sizing: border-box;
+    transition: border-color .12s, box-shadow .12s;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus {
+    outline: 0;
+    border-color: var(--sakura-500);
+    box-shadow: 0 0 0 3px rgba(184,88,122,0.12);
+  }
+  .field textarea { resize: vertical; min-height: 60px; }
+
+  /* Map markers */
+  .leaflet-container { font-family: 'Inter', system-ui, sans-serif; background: var(--sakura-50); }
+  .leaflet-control-attribution {
+    background: rgba(255,255,255,0.85) !important;
+    font-size: 10px !important;
+    color: var(--ink-soft) !important;
+  }
+  .user-marker {
+    width: 20px; height: 20px;
+    background: #4A90E2;
+    border: 3px solid white;
+    border-radius: 50%;
+    box-shadow: 0 0 0 5px rgba(74,144,226,0.25), 0 2px 6px rgba(0,0,0,0.18);
+  }
+  .site-marker-wrap {
+    position: relative;
+    width: 40px; height: 40px;
+    transition: transform .18s ease;
+  }
+  .site-marker-wrap:hover, .site-marker-wrap.highlight {
+    transform: scale(1.35);
+    z-index: 600 !important;
+  }
+  .site-marker {
+    width: 40px; height: 40px;
+    filter: drop-shadow(0 1px 4px rgba(0,0,0,0.20));
+  }
+  .site-alert-badge {
+    position: absolute;
+    top: -2px; right: -2px;
+    width: 18px; height: 18px;
+    background: var(--warn-fg);
+    border: 2px solid white;
+    border-radius: 50%;
+    color: white;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  }
+  .site-alert-badge svg { width: 10px; height: 10px; display: block; }
+
+  /* First-run hint */
+  .hint {
+    position: absolute;
+    top: 130px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--ink);
+    color: white;
+    padding: 9px 16px;
+    border-radius: 999px;
+    font-size: 13px;
+    z-index: 1000;
+    box-shadow: var(--shadow);
+    opacity: 0;
+    transition: opacity .3s;
+    pointer-events: none;
+    text-align: center;
+  }
+  .hint.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<header class="header">
+  <div class="brand" id="btn-fit-bounds" style="cursor:pointer;" title="Zoom to see all sites">
+    <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+      <use href="#sakura-open"/>
+    </svg>
+    <div class="brand-text">
+      <span class="brand-title">Toronto Sakura</span>
+      <span class="brand-sub">Cherry Blossom Map · 2026</span>
+    </div>
+  </div>
+</header>
+
+<!-- Right-side vertical toolbar — order: info / report / layer / message / ALL -->
+<div class="right-toolbar" id="right-toolbar">
+  <button class="icon-btn" id="btn-about" aria-label="About this map" data-tooltip="About this map" title="About this map">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/>
+      <line x1="12" y1="16" x2="12" y2="12"/>
+      <line x1="12" y1="8" x2="12.01" y2="8"/>
+    </svg>
+  </button>
+  <button class="icon-btn" id="btn-report" aria-label="Report a sighting" data-tooltip="Report a bloom sighting" title="Report a bloom sighting (sends an email to me)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 3v18l5-3 5 3 5-3 3 2V3z"/>
+      <path d="M9 9h6M9 13h4"/>
+    </svg>
+  </button>
+  <button class="icon-btn" id="btn-layers" aria-label="Toggle satellite layer" data-tooltip="Map / satellite" title="Switch between map and satellite imagery">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polygon points="12 2 22 8.5 12 15 2 8.5 12 2"/>
+      <polyline points="2 15.5 12 22 22 15.5"/>
+    </svg>
+  </button>
+  <button class="icon-btn" id="btn-contact" aria-label="Contact" data-tooltip="Contact" title="Send me an email">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+      <polyline points="22,6 12,13 2,6"/>
+    </svg>
+  </button>
+  <button class="icon-btn icon-btn-all" id="btn-all" aria-label="See all sakura sites" data-tooltip="All sakura sites" title="See all sakura sites">
+    <span>ALL</span>
+  </button>
+</div>
+
+<div class="hint" id="hint">Tap a sakura icon to see what's there</div>
+
+<!-- Bloom-status legend (bottom-right, always visible) -->
+<div class="legend" id="legend">
+  <h4>Bloom status · 2026</h4>
+  <div class="legend-row" title="Bloom confirmed via a 2026 sighting">
+    <svg viewBox="0 0 32 32"><use href="#sakura-confirmed"/></svg>
+    Bloom confirmed
+  </div>
+  <div class="legend-row" title="Today falls in the typical peak window for this site">
+    <svg viewBox="0 0 32 32"><use href="#sakura-likely"/></svg>
+    Likely in bloom
+  </div>
+  <div class="legend-row" title="Outside the typical peak window">
+    <svg viewBox="0 0 32 32"><use href="#sakura-likely-not"/></svg>
+    Likely not in bloom yet
+  </div>
+</div>
+
+<!-- Detail panel (left) -->
+<aside class="panel detail" id="panel-detail" aria-hidden="true">
+  <button class="panel-close" id="panel-detail-close" aria-label="Close" title="Close">×</button>
+  <div id="panel-detail-content"></div>
+</aside>
+
+<!-- Nearby panel (right) -->
+<aside class="panel nearby" id="panel-nearby" aria-hidden="true">
+  <button class="panel-close" id="panel-nearby-close" aria-label="Close nearest sites" title="Close">×</button>
+  <div id="panel-nearby-content"></div>
+</aside>
+
+
+
+
+<!-- Reusable sakura icons — 5 notched petals (heart-tipped) + 5 stamen dots -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- Petal path: rounded petal with a small heart-notch at the tip; arranged 5x at 72° -->
+    <g id="sakura-petals">
+      <path d="M -1 -10.5 C -3.6 -10, -5 -7.5, -4.6 -4.5 C -4.2 -2.5, -2.6 -1, 0 -0.6 C 2.6 -1, 4.2 -2.5, 4.6 -4.5 C 5 -7.5, 3.6 -10, 1 -10.5 C 0.5 -9.6, -0.5 -9.6, -1 -10.5 Z"/>
+      <path d="M -1 -10.5 C -3.6 -10, -5 -7.5, -4.6 -4.5 C -4.2 -2.5, -2.6 -1, 0 -0.6 C 2.6 -1, 4.2 -2.5, 4.6 -4.5 C 5 -7.5, 3.6 -10, 1 -10.5 C 0.5 -9.6, -0.5 -9.6, -1 -10.5 Z" transform="rotate(72)"/>
+      <path d="M -1 -10.5 C -3.6 -10, -5 -7.5, -4.6 -4.5 C -4.2 -2.5, -2.6 -1, 0 -0.6 C 2.6 -1, 4.2 -2.5, 4.6 -4.5 C 5 -7.5, 3.6 -10, 1 -10.5 C 0.5 -9.6, -0.5 -9.6, -1 -10.5 Z" transform="rotate(144)"/>
+      <path d="M -1 -10.5 C -3.6 -10, -5 -7.5, -4.6 -4.5 C -4.2 -2.5, -2.6 -1, 0 -0.6 C 2.6 -1, 4.2 -2.5, 4.6 -4.5 C 5 -7.5, 3.6 -10, 1 -10.5 C 0.5 -9.6, -0.5 -9.6, -1 -10.5 Z" transform="rotate(216)"/>
+      <path d="M -1 -10.5 C -3.6 -10, -5 -7.5, -4.6 -4.5 C -4.2 -2.5, -2.6 -1, 0 -0.6 C 2.6 -1, 4.2 -2.5, 4.6 -4.5 C 5 -7.5, 3.6 -10, 1 -10.5 C 0.5 -9.6, -0.5 -9.6, -1 -10.5 Z" transform="rotate(288)"/>
+    </g>
+    <!-- 5 stamen dots in the gaps between petals -->
+    <g id="sakura-stamens">
+      <circle cx="0" cy="-3.4" r="0.85"/>
+      <circle cx="0" cy="-3.4" r="0.85" transform="rotate(72)"/>
+      <circle cx="0" cy="-3.4" r="0.85" transform="rotate(144)"/>
+      <circle cx="0" cy="-3.4" r="0.85" transform="rotate(216)"/>
+      <circle cx="0" cy="-3.4" r="0.85" transform="rotate(288)"/>
+    </g>
+
+    <!-- Bloom confirmed (deep pink) -->
+    <symbol id="sakura-confirmed" viewBox="0 0 32 32">
+      <g transform="translate(16 16) rotate(36)">
+        <g fill="#B8587A"><use href="#sakura-petals"/></g>
+        <g fill="white"><use href="#sakura-stamens"/></g>
+      </g>
+    </symbol>
+    <!-- Likely in bloom (light pink) -->
+    <symbol id="sakura-likely" viewBox="0 0 32 32">
+      <g transform="translate(16 16) rotate(36)">
+        <g fill="#F5C6D2" stroke="#D4768F" stroke-width="0.6"><use href="#sakura-petals"/></g>
+        <g fill="#B8587A"><use href="#sakura-stamens"/></g>
+      </g>
+    </symbol>
+    <!-- Likely not in bloom (gray) -->
+    <symbol id="sakura-likely-not" viewBox="0 0 32 32">
+      <g transform="translate(16 16) rotate(36)">
+        <g fill="#C9C2C5" stroke="#8E8388" stroke-width="0.6"><use href="#sakura-petals"/></g>
+        <g fill="#6B5C62"><use href="#sakura-stamens"/></g>
+      </g>
+    </symbol>
+
+    <!-- Legacy aliases so old references in JS still work during transition -->
+    <symbol id="sakura-open" viewBox="0 0 32 32"><use href="#sakura-confirmed"/></symbol>
+    <symbol id="sakura-closed" viewBox="0 0 32 32"><use href="#sakura-likely-not"/></symbol>
+  </defs>
+</svg>
+
+<!-- About modal -->
+<div class="modal-bg" id="modal-bg"></div>
+<div class="modal" id="modal">
+  <div class="modal-close-bar">
+    <button class="panel-close" onclick="closeModal()" title="Close">×</button>
+  </div>
+  <div class="modal-body">
+  <h2>Toronto Sakura</h2>
+  <p style="color: var(--ink-soft); font-style: italic; margin-bottom: 20px;">A field map of cherry blossom sites across the City of Toronto.</p>
+
+  <h3>About this map</h3>
+  <p>This map covers cherry blossom sites within the City of Toronto. It was built to help people find and navigate these sites during the short spring bloom window. Unlike a simple pin map, it outlines each viewing area as a polygon so you can see where the trees are and plan how to move through larger parks like High Park or Centennial Park.</p>
+  <p>The map includes 20 sites: 17 from the City of Toronto's official cherry blossom page, plus 3 additional sites confirmed through public photos and on-the-ground sources.</p>
+
+  <h3>Features</h3>
+
+  <p style="font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mist); font-weight: 600; margin: 14px 0 6px;">On the map</p>
+  <ul style="font-size: 14px; line-height: 1.7; padding-left: 20px; margin: 0 0 4px;">
+    <li><strong>Polygon viewing zones.</strong> Pink areas show where cherry trees are clustered at each site, instead of just a pin.</li>
+    <li><strong>Sakura icon colours.</strong>
+      <span style="display:inline-flex;align-items:center;gap:4px;vertical-align:middle;"><svg width="20" height="20" viewBox="0 0 32 32" style="vertical-align:middle"><use href="#sakura-confirmed"/></svg></span> deep pink means <em>bloom confirmed</em> from a 2026 sighting;
+      <span style="display:inline-flex;align-items:center;gap:4px;vertical-align:middle;"><svg width="20" height="20" viewBox="0 0 32 32" style="vertical-align:middle"><use href="#sakura-likely"/></svg></span> light pink means <em>likely in bloom</em> based on the typical peak window for the site;
+      <span style="display:inline-flex;align-items:center;gap:4px;vertical-align:middle;"><svg width="20" height="20" viewBox="0 0 32 32" style="vertical-align:middle"><use href="#sakura-likely-not"/></svg></span> grey means <em>likely not in bloom yet</em>.</li>
+    <li><strong>Heads-up alerts.</strong> Sites with construction, closures, or restricted access are flagged with an orange
+      <span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;background:var(--warn-fg);border:2px solid white;border-radius:50%;vertical-align:middle;box-shadow:0 1px 3px rgba(0,0,0,0.2);">
+        <svg viewBox="0 0 8 16" fill="white" style="width:6px;height:6px;display:block;"><rect x="3" y="2" width="2" height="8" rx="1"/><circle cx="4" cy="13" r="1.3"/></svg>
+      </span> badge.</li>
+  </ul>
+
+  <p style="font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mist); font-weight: 600; margin: 14px 0 6px;">Left panel · Site detail (click a site)</p>
+  <ul style="font-size: 14px; line-height: 1.7; padding-left: 20px; margin: 0 0 4px;">
+    <li><strong>Bloom forecast and 2026 sightings.</strong> Each site shows a typical 2-week bloom window, derived from about 20 years of peak-bloom records at High Park Nature Centre, adjusted for site-specific conditions and 2026 sighting reports.</li>
+    <li>The 2026 timeline marks each reported sighting as a dot: pink for days the trees were seen in bloom, gray for bud or fallen petal sightings. Hover any dot to see the date and source. Sightings come from publicly shared photos and posts, and you can submit your own through the Report button.</li>
+    <li><strong>Where to see and accessibility info</strong>, drawn from public sources.</li>
+    <li><strong>Drop a pin (long-press anywhere)</strong> to copy that spot's coordinates and open it in Google Maps, Apple Maps, or any maps app.</li>
+    <li><strong>Report a sighting or issue.</strong> Spotted a tree blooming, or noticed a closure or access problem? Submit through the Report button in the panel and I'll add it to the map.</li>
+  </ul>
+
+  <p style="font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mist); font-weight: 600; margin: 14px 0 6px;">Top toolbar (left to right)</p>
+  <ul style="font-size: 14px; line-height: 1.7; padding-left: 20px; margin: 0 0 4px;">
+    <li><strong>About.</strong> This overview.</li>
+    <li><strong>Report.</strong> Submit a bloom sighting or a heads-up issue.</li>
+    <li><strong>Map / Satellite.</strong> Toggle between street map and satellite imagery.</li>
+    <li><strong>Contact.</strong> Send me an email with corrections, ideas, or a hello.</li>
+    <li><strong>ALL.</strong> All 20 sites in one list. Sort A–Z or by Nearest after enabling location.</li>
+  </ul>
+
+  <h3>How the polygons were made</h3>
+  <p>Each polygon was manually traced to approximate the cherry tree viewing area. Starting from the City of Toronto cherry blossom page, which lists all 17 official sites with descriptions and approximate pin locations, each polygon was then refined using satellite imagery (Google Maps and Google Earth, including historical imagery), Google Street View, and publicly available photos, videos, and articles. Open tree datasets and LiDAR canopy layers were reviewed but not relied on as primary sources because they cannot reliably distinguish cherry trees from other species. The three off-list sites (Ramsden Park, Toronto Music Garden, Front Campus at U of T) were added based on the same public evidence.</p>
+
+  <h3>Disclaimer</h3>
+  <p style="background: var(--warn-bg); border: 1px solid var(--warn-border); border-left: 3px solid var(--warn-fg); border-radius: 10px; padding: 12px 14px; color: var(--warn-fg); font-size: 14px; line-height: 1.65;">
+    <strong>Pink shaded areas are approximate outlines, not precise tree locations.</strong> Trees may not cover the entire shaded area, and some trees at a site may fall outside it. Treat each polygon as a general guide.<br/><br/>
+    <strong>The bloom forecast is an estimate, not a guarantee.</strong> It is based on about 20 years of peak bloom records at High Park, adjusted for known site-specific differences. Actual bloom timing varies with weather. 2026 sighting data is gathered from publicly available sources and may be incomplete.
+  </p>
+
+  <h3>Credits</h3>
+  <p style="font-size: 14px;">Data collection, mapping, and design are by Yujie Chen. Website built with assistance from AI tools.<br/>
+  Site descriptions and tree counts adapted from the <a href="https://www.toronto.ca/explore-enjoy/festivals-events/cherry-blossoms/" target="_blank" rel="noopener">City of Toronto cherry blossoms page</a>.<br/>
+  Bloom timing references include the <a href="https://highparknaturecentre.com/cherry-blossom-tracking/" target="_blank" rel="noopener">High Park Nature Centre cherry blossom tracker</a>.<br/>
+  The 2026 sightings on this map come from photos, posts, and trackers shared publicly online. Many thanks to the Toronto cherry blossom community for making this possible.<br/>
+  Basemap: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors and <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>; satellite imagery © <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a> and partners.</p>
+
+  </div>
+</div>
+
+<!-- Report modal — handles both bloom sightings and heads-up issues -->
+<div class="modal" id="modal-report" style="max-width: 460px;">
+  <div class="modal-close-bar">
+    <button class="panel-close" onclick="closeReport()" title="Close">×</button>
+  </div>
+  <div class="modal-body">
+  <h2>Report</h2>
+  <p style="color: var(--ink-soft); font-size: 14px; margin-bottom: 16px;">Saw a cherry tree blooming somewhere, or noticed a closure or access problem? Send me the details and I'll add it to the map. Submitting opens your email client with the report pre-filled.</p>
+  <form id="report-form">
+    <div class="field">
+      <span>Type</span>
+      <div class="sort-toggle" role="group" aria-label="Report type" style="margin: 0;">
+        <button type="button" class="active" data-rtype="sighting">Bloom sighting</button>
+        <button type="button" data-rtype="issue">Heads-up issue</button>
+      </div>
+      <input type="hidden" name="type" value="sighting" />
+    </div>
+    <label class="field">
+      <span>Site</span>
+      <select name="site" required></select>
+    </label>
+    <label class="field">
+      <span>Date you saw it</span>
+      <input type="date" name="date" required />
+    </label>
+    <label class="field" data-only="sighting">
+      <span>What you saw</span>
+      <select name="stage">
+        <option value="">Choose…</option>
+        <option value="bud">Bud</option>
+        <option value="partial">Partial bloom</option>
+        <option value="bloom">Bloom</option>
+        <option value="fallen">Fallen</option>
+      </select>
+    </label>
+    <label class="field" data-only="issue" style="display:none">
+      <span>Describe the issue</span>
+      <textarea name="issue" rows="3" placeholder="e.g. construction blocking the path, parking closed, etc."></textarea>
+    </label>
+    <label class="field">
+      <span>Your name <span style="color:var(--mist);font-weight:400">(optional)</span></span>
+      <input type="text" name="name" />
+    </label>
+    <label class="field">
+      <span>Notes / source <span style="color:var(--mist);font-weight:400">(optional, e.g. Instagram link)</span></span>
+      <textarea name="notes" rows="2"></textarea>
+    </label>
+    <div style="margin-top: 16px; display: flex; gap: 8px;">
+      <button type="submit" class="btn-primary" style="flex:1">Open email to send</button>
+      <button type="button" class="btn-secondary" id="report-cancel">Cancel</button>
+    </div>
+  </form>
+  </div>
+</div>
+
+<!-- Contact modal -->
+<div class="modal" id="modal-contact" style="max-width: 460px;">
+  <div class="modal-close-bar">
+    <button class="panel-close" onclick="closeContact()" title="Close">×</button>
+  </div>
+  <div class="modal-body">
+  <h2>Get in touch</h2>
+  <form id="contact-form" style="margin-top: 18px;">
+    <label class="field">
+      <span>Your name</span>
+      <input type="text" name="name" required />
+    </label>
+    <label class="field">
+      <span>Message</span>
+      <textarea name="message" rows="5" required></textarea>
+    </label>
+    <div style="margin-top: 16px; display: flex; gap: 8px;">
+      <button type="submit" class="btn-primary" style="flex:1">Open email to send</button>
+      <button type="button" class="btn-secondary" id="contact-cancel">Cancel</button>
+    </div>
+  </form>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<!-- Instant tooltip used by bloom dots & other elements that need 0-delay hover -->
+<div class="bloom-tip" id="bloom-tip" aria-hidden="true"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+  // ---------- Embedded GeoJSON ----------
+  const SITES = {"type": "FeatureCollection", "name": "1", "crs": {"type": "name", "properties": {"name": "urn:ogc:def:crs:OGC:1.3:CRS84"}}, "features": [{"type": "Feature", "properties": {"fid": 1, "Name": "Birkdale Ravine", "address": "1100 Brimley Rd.,  Scarborough", "on_official_list": true, "alert": "Pedestrian bridge north of Pomeroy Street is closed (fall 2026 – spring 2027). An alternative bridge is available near Waterfield Drive.", "description": "Cherry trees are planted as a tree tunnel near the Pomeroy Street and Lyon Heights Road entrance.", "trees": "45 cherry trees donated by Sagamihara (Toronto’s sister city in Japan), planted in 2015–2016.", "verification": "City of Toronto's map marks a viewing area here, with text describing a tree tunnel near the Pomeroy Street and Lyon Heights Road entrance. I refined the polygon using on-the-ground YouTube footage and Google Earth historical imagery.", "reliability": "high", "bloom_2026": "unknown", "bloom_2026_note": "No 2026 sighting yet — bloom window estimated from Apr 27.", "bloom_offset_days": 4, "references": ["{ \"title\": \"City of Toronto — Cherry Blossoms\", \"url\": \"https:\\/\\/www.toronto.ca\\/explore-enjoy\\/festivals-events\\/cherry-blossoms\\/\" }", "{ \"title\": \"Birkdale Ravine cherry blossoms (YouTube)\", \"url\": \"https:\\/\\/www.youtube.com\\/watch?v=JeynIvFoyZA\" }"], "credit": "© 2026 Yujie Chen", "photos": [], "alert_source": "City of Toronto cherry blossoms page", "accessibility": ["Sloped paved paths from Birkdale Community Centre and Brimley Road parking lot", "Level paved pathway from Pomeroy Street entrance", "TTC service along Ellesmere / Brimley"]}, "geometry": {"type": "MultiPolygon", "coordinates": [[[[-79.25992068880595, 43.760394224740324, 0.0], [-79.25995499859621, 43.760368585877636, 0.0], [-79.26000437998985, 43.760345549152866, 0.0], [-79.26006883298685, 43.760325114566015, 0.0], [-79.26014835758723, 43.7603072821171, 0.0], [-79.26024295379096, 43.7602920518061, 0.0], [-79.2603272868031, 43.76031386859134, 0.0], [-79.26040135662366, 43.7603727324728, 0.0], [-79.2604651632526, 43.760468643450515, 0.0], [-79.26051870668994, 43.76060160152447, 0.0], [-79.26055566025231, 43.76070730212415, 0.0], [-79.2605760239397, 43.76078574524958, 0.0], [-79.26057979775211, 43.760836930900744, 0.0], [-79.26056698168955, 43.760860859077646, 0.0], [-79.26051496130043, 43.76084980094103, 0.0], [-79.26042373658476, 43.7608037564909, 0.0], [-79.26029330754253, 43.76072272572726, 0.0], [-79.26012367417373, 43.7606067086501, 0.0], [-79.2600050265947, 43.76051328612656, 0.0], [-79.25993736480545, 43.76044245815663, 0.0], [-79.25992068880595, 43.760394224740324, 0.0]]]]}}, {"type": "Feature", "properties": {"fid": 2, "Name": "Broadacres Park", "address": "35 Crendon Dr.,  Etobicoke", "on_official_list": true, "alert": null, "description": "Cherry trees are located in rows near the southwest corner of the park near Elderfield Crescent.", "trees": "100 trees planted in November 2002.", "verification": "City of Toronto's pin is approximate. I traced the polygon from Google Maps user photos showing the trees in rows near the southwest corner of the park.", "reliability": "high", "bloom_2026": "unknown", "bloom_2026_note": "Bloom not confirmed for 2026.", "bloom_offset_days": 0, "references": ["{ \"title\": \"City of Toronto — Cherry Blossoms\", \"url\": \"https:\\/\\/www.toronto.ca\\/explore-enjoy\\/festivals-events\\/cherry-blossoms\\/\" }"], "credit": "© 2026 Yujie Chen", "photos": [], "alert_source": null, "accessibility": ["No paved pathways to trees", "Trees visible from the road", "TTC bus service along Burnhamthorpe Road and The West Mall"]}, "geometry": {"type": "MultiPolygon", "coordinates": [[[[-79.56962948437041, 43.647019508202256, 0.0], [-79.56980023961152, 43.64730740275408, 0.0], [-79.56981547599995, 43.64754184175569, 0.0], [-79.56967519353569, 43.64772282520708, 0.0], [-79.5693793922187, 43.647850353108254, 0.0], [-79.56892807204905, 43.64792442545919, 0.0], [-79.56857094601966, 43.64791476777151, 0.0], [-79.56830801413057, 43.647821380045215, 0.0], [-79.56813927638176, 43.647644262280295, 0.0], [-79.56806473277325, 43.64738341447675, 0.0], [-79.56803788864131, 43.64717011541279, 0.0], [-79.56805874398599, 43.6470043650884, 0.0], [-79.56812729880723, 43.6468861635036, 0.0], [-79.56824355310503, 43.646815510658385, 0.0], [-79.56839045738822, 43.64675490446097, 0.0], [-79.56856801165675, 43.646704344911356, 0.0], [-79.56877621591063, 43.646663832009544, 0.0], [-79.56901507014987, 43.64663336575553, 0.0], [-79.56923689963958, 43.646682489702975, 0.0], [-79.56944170437976, 43.64681120385189, 0.0], [-79.56962948437041, 43.647019508202256, 0.0]]]]}}, {"type": "Feature", "properties": {"fid": 3, "Name": "Cedarvale Park", "address": "443 Arlington Ave., York", "on_official_list": true, "alert": null, "description": "Circular grouping of cherry trees within Cedarvale Park.", "trees": "", "verification": "City of Toronto's location is accurate. I confirmed and refined it using YouTube footage and Google Street View.", "reliability": "high", "bloom_2026": "unknown", "bloom_2026_note": "Bloom not confirmed for 2026.", "bloom_offset_days": 0, "references": ["{ \"title\": \"City of Toronto — Cherry Blossoms\", \"url\": \"https:\\/\\/www.toronto.ca\\/explore-enjoy\\/festivals-events\\/cherry-blossoms\\/\" }", "{ \"title\": \"Cedarvale Park cherry blossoms (YouTube)\", \"url\": \"https:\\/\\/www.youtube.com\\/watch?v=PBVJg6J4uMw\" }"], "credit": "© 2026 Yujie Chen", "photos": [], "alert_source": null, "accessibility": ["Paved paths near trees", "Free parking at Phil White Arena"]}, "geometry": {"type": "MultiPolygon", "coordinates": [[[[-79.43256031297173, 43.693297488315466, 0.0], [-79.43249506704348, 43.69330866220159, 0.0], [-79.43244024505063, 43.69331715141865, 0.0], [-79.43239584699319, 43.69332295596662, 0.0], [-79.43236187287118, 43.69332607584555, 0.0], [-79.4323383226846, 43.693326511055396, 0.0], [-79.43230827439292, 43.693323445839994, 0.0], [-79.43227172799614, 43.69331688019936, 0.0], [-79.43222868349429, 43.693306814133464, 0.0], [-79.43217914088733, 43.69329324764233, 0.0], [-79.4321341896274, 43.69327752392523, 0.0], [-79.43209382971452, 43.69325964298217, 0.0], [-79.43205806114864, 43.693239604813144, 0.0], [-79.43202688392981, 43.69321740941815, 0.0], [-79.43200216559883, 43.69319448671335, 0.0], [-79.43198390615571, 43.69317083669871, 0.0], [-79.43197210560047, 43.69314645937427, 0.0], [-79.4319667639331, 43.69312135474, 0.0], [-79.43196627041692, 43.69309503545606, 0.0], [-79.43197062505192, 43.69306750152244, 0.0], [-79.43197982783808, 43.693038752939145, 0.0], [-79.4319938787754, 43.69300878970618, 0.0], [-79.43201501476261, 43.69298681822674, 0.0], [-79.43204323579971, 43.69297283850085, 0.0], [-79.43207854188668, 43.69296685052851, 0.0], [-79.43212093302353, 43.6929688543097, 0.0], [-79.43217216736822, 43.692969542246665, 0.0], [-79.43223224492078, 43.69296891433942, 0.0], [-79.43230116568122, 43.69296697058795, 0.0], [-79.43237892964953, 43.69296371099227, 0.0], [-79.43244970226496, 43.69296981348279, 0.0], [-79.43251348352754, 43.69298527805952, 0.0], [-79.43257027343722, 43.69301010472246, 0.0], [-79.43262007199405, 43.693044293471615, 0.0], [-79.43265513416384, 43.69308150696416, 0.0], [-79.43267545994661, 43.693121745200116, 0.0], [-79.43268104934235, 43.693165008179456, 0.0], [-79.43267190235106, 43.69321129590218, 0.0], [-79.43264873062553, 43.693248805165766, 0.0], [-79.43261153416576, 43.693277535970196, 0.0], [-79.43256031297173, 43.693297488315466, 0.0]]]]}}, {"type": "Feature", "properties": {"fid": 4, "Name": "Japanese Canadian Cultural Centre", "address": "6 Garamond Crt.,  North York", "on_official_list": true, "alert": null, "description": "North, south, and east sides of the parking lot (more concentrated on north side).", "trees": "Planted in 2002, 2004, 2012.", "verification": "City of Toronto describes trees on three sides of the parking lot and on the north side of the building. I confirmed and refined the polygon via Google Street View, photos, and on-the-ground video.", "reliability": "high", "bloom_2026": "unknown", "bloom_2026_note": "Bloom not confirmed for 2026.", "bloom_offset_days": 0, "references": ["{ \"title\": \"City of Toronto — Cherry Blossoms\", \"url\": \"https:\\/\\/www.toronto.ca\\/explore-enjoy\\/festivals-events\\/cherry-blossoms\\/\" }"], "credit": "© 2026 Yujie Chen", "photos": [], "alert_source": null, "accessibility": []}, "geometry": {"type": "MultiPolygon", "coordinates": [[[[-79.33525292635285, 43.72567268954726, 0.0], [-79.33524782302425, 43.72567242750616, 0.0], [-79.3351860534441, 43.72568027088134, 0.0], [-79.3350676176124, 43.725696219672805, 0.0], [-79.33489251552915, 43.72572027388055, 0.0], [-79.33466074719436, 43.72575243350458, 0.0], [-79.33448147612737, 43.725782409318086, 0.0], [-79.33435470232818, 43.725810201321075, 0.0], [-79.3342804257968, 43.725835809513555, 0.0], [-79.33425864653323, 43.72585923389553, 0.0], [-79.33424060188972, 43.725876679923964, 0.0], [-79.33422629186623, 43.725888147598866, 0.0], [-79.33421571646281, 43.72589363692024, 0.0], [-79.33420887567942, 43.72589314788808, 0.0], [-79.33419901634221, 43.7258897069858, 0.0], [-79.33418613845117, 43.725883314213384, 0.0], [-79.3341702420063, 43.72587396957085, 0.0], [-79.33415132700758, 43.72586167305819, 0.0], [-79.33413133361009, 43.725853569466956, 0.0], [-79.33411026181383, 43.72584965879715, 0.0], [-79.3340881116188, 43.72584994104878, 0.0], [-79.334064883025, 43.72585441622184, 0.0], [-79.3340471027575, 43.72586744031805, 0.0], [-79.33403477081626, 43.725889013337394, 0.0], [-79.33402788720133, 43.725919135279895, 0.0], [-79.3340264519127, 43.72595780614553, 0.0], [-79.33402636074248, 43.72599030616209, 0.0], [-79.33402761369072, 43.72601663532956, 0.0], [-79.33403021075736, 43.72603679364795, 0.0], [-79.33403415194243, 43.72605078111725, 0.0], [-79.33403227468884, 43.72606126565951, 0.0], [-79.33402457899656, 43.72606824727474, 0.0], [-79.33401106486559, 43.72607172596294, 0.0], [-79.33399173229597, 43.72607170172408, 0.0], [-79.33397633981573, 43.72605963993962, 0.0], [-79.33396488742494, 43.72603554060956, 0.0], [-79.33395737512353, 43.725999403733866, 0.0], [-79.33395380291157, 43.72595122931256, 0.0], [-79.33394383852166, 43.72590775659776, 0.0], [-79.33392748195385, 43.725868985589486, 0.0], [-79.33390473320813, 43.72583491628772, 0.0], [-79.33387559228449, 43.72580554869246, 0.0], [-79.33386415591269, 43.725778907089534, 0.0], [-79.33387042409277, 43.72575499147893, 0.0], [-79.33389439682469, 43.72573380186064, 0.0], [-79.3339360741085, 43.725715338234664, 0.0], [-79.33397414677079, 43.725704890141216, 0.0], [-79.33400861481161, 43.725702457580276, 0.0], [-79.33403947823093, 43.72570804055186, 0.0], [-79.33406673702878, 43.72572163905596, 0.0], [-79.33408861416864, 43.725733181768156, 0.0], [-79.33410510965052, 43.72574266868844, 0.0], [-79.33411622347441, 43.72575009981682, 0.0], [-79.33412195564033, 43.725755475153306, 0.0], [-79.33419496843146, 43.725752318976795, 0.0], [-79.3343352618478, 43.725740631287294, 0.0], [-79.33454283588935, 43.72572041208481, 0.0], [-79.3348176905561, 43.72569166136933, 0.0], [-79.33502574460552, 43.72567163253977, 0.0], [-79.3351669980376, 43.72566032559614, 0.0], [-79.33524145085232, 43.725657740538416, 0.0], [-79.33524910304968, 43.725663877366614, 0.0], [-79.33525356636557, 43.72566841447748, 0.0], [-79.33525484079996, 43.725671351871036, 0.0], [-79.33525292635285, 43.72567268954726, 0.0]]], [[[-79.33435841135227, 43.72610004035135, 0.0], [-79.33440079611142, 43.72607231667647, 0.0], [-79.33447805267542, 43.72604956069572, 0.0], [-79.33459018104423, 43.726031772409094, 0.0], [-79.3347371812179, 43.72601895181659, 0.0], [-79.3349190531964, 43.72601109891822, 0.0], [-79.33505678368064, 43.72600750148088, 0.0], [-79.33515037267063, 43.72600815950455, 0.0], [-79.33519982016635, 43.72601307298926, 0.0], [-79.33520512616785, 43.72602224193501, 0.0], [-79.33515171498418, 43.726035720551195, 0.0], [-79.33503958661534, 43.72605350883781, 0.0], [-79.33486874106136, 43.72607560679488, 0.0], [-79.33463917832223, 43.726102014422395, 0.0], [-79.33447760245767, 43.72611488922431, 0.0], [-79.33438401346768, 43.726114231200626, 0.0], [-79.33435841135227, 43.72610004035135, 0.0]]], [[[-79.33408681409685, 43.72696130865866, 0.0], [-79.33405084036002, 43.72695157836436, 0.0], [-79.33402217560199, 43.7269404418675, 0.0], [-79.33400081982275, 43.72692789916809, 0.0], [-79.33398677302233, 43.72691395026611, 0.0], [-79.33398003520074, 43.72689859516158, 0.0], [-79.33397911839927, 43.72687917152092, 0.0], [-79.33398402261794, 43.726855679344126, 0.0], [-79.33399474785676, 43.72682811863121, 0.0], [-79.33401129411575, 43.72679648938216, 0.0], [-79.33402258154945, 43.726761526294716, 0.0], [-79.3340286101579, 43.72672322936888, 0.0], [-79.33402937994107, 43.72668159860465, 0.0], [-79.33402489089899, 43.72663663400203, 0.0], [-79.3340211469044, 43.726599620996566, 0.0], [-79.33401814795735, 43.726570559588275, 0.0], [-79.33401589405779, 43.726549449777146, 0.0], [-79.33401438520576, 43.72653629156318, 0.0], [-79.33402081064337, 43.7265258149329, 0.0], [-79.33403517037063, 43.72651801988629, 0.0], [-79.33405746438754, 43.72651290642337, 0.0], [-79.3340876926941, 43.726510474544135, 0.0], [-79.33411512054982, 43.726506189694234, 0.0], [-79.3341397479547, 43.726500051873664, 0.0], [-79.33416157490873, 43.72649206108244, 0.0], [-79.33418060141193, 43.72648221732055, 0.0], [-79.33419979949181, 43.726471778038274, 0.0], [-79.33421916914835, 43.726460743235634, 0.0], [-79.33423871038158, 43.7264491129126, 0.0], [-79.33425842319149, 43.726436887069184, 0.0], [-79.33427903614417, 43.726430441645476, 0.0], [-79.33430054923961, 43.72642977664149, 0.0], [-79.33432296247786, 43.72643489205721, 0.0], [-79.33434627585889, 43.72644578789266, 0.0], [-79.33437109808847, 43.726479999551444, 0.0], [-79.33439742916663, 43.72653752703359, 0.0], [-79.33442526909334, 43.72661837033909, 0.0], [-79.33445461786863, 43.72672252946794, 0.0], [-79.33446622832456, 43.72680264594294, 0.0], [-79.33446010046113, 43.72685871976407, 0.0], [-79.33443623427833, 43.72689075093134, 0.0], [-79.33439462977617, 43.72689873944475, 0.0], [-79.33435146087949, 43.72690880469763, 0.0], [-79.33430672758831, 43.726920946689994, 0.0], [-79.33426042990261, 43.72693516542183, 0.0], [-79.3342125678224, 43.72695146089313, 0.0], [-79.33416767782805, 43.72696124992304, 0.0], [-79.33412575991952, 43.72696453251155, 0.0], [-79.33408681409685, 43.72696130865866, 0.0]]]]}}, {"type": "Feature", "properties": {"fid": 5, "Name": "Cherry Street and Villiers Street", "address": "309 Cherry St., Toronto", "on_official_list": true, "alert": "Construction related to the Port Lands Flood Protection Project is ongoing and access may be limited.", "description": "Cherry trees are located at the northeast corner of the intersection.", "trees": "45 trees planted in July 2006.", "verification": "City of Toronto lists the trees at the northeast corner of Cherry Street and Villiers Street, but on-the-ground confirmation is hard right now because of active Port Lands construction.", "reliability": "low", "bloom_2026": "unknown", "bloom_2026_note": "Bloom not confirmed for 2026.", "bloom_offset_days": 0, "references": ["{ \"title\": \"City of Toronto — Cherry Blossoms\", \"url\": \"https:\\/\\/www.toronto.ca\\/explore-enjoy\\/festivals-events\\/cherry-blossoms\\/\" }", "{ \"title\": \"Port Lands Construction — Waterfront Toronto\", \"url\": \"https:\\/\\/portlandsto.ca\\/construction\\/\" }"], "credit": "© 2026 Yujie Chen", "photos": [], "alert_source": "City of Toronto cherry blossoms page + Waterfront Toronto Port Lands project", "accessibility": ["Paved pathways available", "Trees visible from the road"]}, "geometry": {"type": "MultiPolygon", "coordinates": [[[[-79.3537507764544, 43.64710236534714, 0.0], [-79.35376218521174, 43.6471023434663, 0.0], [-79.35378404831144, 43.64711818376557, 0.0], [-79.35381636575354, 43.64714988624493, 0.0], [-79.35385913753804, 43.64719745090439, 0.0], [-79.35391236366493, 43.64726087774395, 0.0], [-79.35394817023514, 43.64731015794953, 0.0], [-79.35396655724868, 43.64734529152113, 0.0], [-79.35396752470555, 43.64736627845874, 0.0], [-79.35395107260574, 43.647373118762374, 0.0], [-79.35393039103512, 43.647381036348406, 0.0], [-79.3539054799937, 43.647390031216844, 0.0], [-79.35387633948146, 43.64740010336768, 0.0], [-79.35384296949844, 43.647411252800914, 0.0], [-79.35381730729574, 43.64741985401307, 0.0], [-79.3537993528734, 43.64742590700416, 0.0], [-79.35378910623137, 43.647429411774176, 0.0], [-79.3537865673697, 43.64743036832311, 0.0], [-79.35378021020286, 43.64743166636236, 0.0], [-79.35377003473086, 43.64743330589193, 0.0], [-79.35375604095367, 43.64743528691181, 0.0], [-79.3537382288713, 43.647437609422, 0.0], [-79.35372267538796, 43.64743714908123, 0.0], [-79.35370938050366, 43.64743390588949, 0.0], [-79.35369834421839, 43.64742787984679, 0.0], [-79.35368956653213, 43.6474190709531, 0.0], [-79.35367894964685, 43.64740956315082, 0.0], [-79.35366649356251, 43.64739935643996, 0.0], [-79.35365219827916, 43.647388450820486, 0.0], [-79.35363606379678, 43.647376846292424, 0.0], [-79.35361648120714, 43.6473671835838, 0.0], [-79.35359345051026, 43.64735946269461, 0.0], [-79.35356697170613, 43.64735368362487, 0.0], [-79.35353704479475, 43.64734984637459, 0.0], [-79.35350738493732, 43.64734710847251, 0.0], [-79.35347799213383, 43.64734546991865, 0.0], [-79.35344886638428, 43.647344930713004, 0.0], [-79.35342000768868, 43.64734549085558, 0.0], [-79.35339330851005, 43.647346398926395, 0.0], [-79.35336876884836, 43.647347654925454, 0.0], [-79.35334638870361, 43.64734925885275, 0.0], [-79.35332616807582, 43.64735121070829, 0.0], [-79.35331023609787, 43.64734814699763, 0.0], [-79.35329859276976, 43.64734006772077, 0.0], [-79.35329123809147, 43.64732697287772, 0.0], [-79.35328817206302, 43.64730886246848, 0.0], [-79.3533140031853, 43.64728407349365, 0.0], [-79.35336873145835, 43.64725260595324, 0.0], [-79.35345235688212, 43.64721445984726, 0.0], [-79.35356487945666, 43.647169635175715, 0.0], [-79.35365212357686, 43.64713601120184, 0.0], [-79.3537140892428, 43.647113587925645, 0.0], [-79.3537507764544, 43.64710236534714, 0.0]]]]}}, {"type": "Feature", "properties": {"fid": 6, "Name": "Woodbine Park", "address": "1695 Queen St. E., Toronto", "on_official_list": true, "alert": null, "description": "Along the curved path next to the pond (tree tunnel area, still maturing).", "trees": "", "verification": "City of Toronto lists 20 (not yet mature) trees in a tree tunnel along the curved path next to the pond. I have no on-the-ground confirmation for 2026.", "reliability": "low", "bloom_2026": "unknown", "bloom_2026_note": "Bloom not confirmed for 2026.", "bloom_offset_days": 0, "references": ["{ \"title\": \"City of Toronto — Cherry Blossoms\", \"url\": \"https:\\/\\/www.toronto.ca\\/explore-enjoy\\/festivals-events\\/cherry-blossoms\\/\" }"], "credit": "© 2026 Yujie Chen", "photos": [], "alert_source": null, "accessibility": ["Paved pathways", "TTC nearby"]}, "geometry": {"type": "MultiPolygon", "coordinates": [[[[-79.31156883103786, 43.66475666925197, 0.0], [-79.31153194282062, 43.66476495143466, 0.0], [-79.31148915602233, 43.664768496721365, 0.0], [-79.31144047064296, 43.66476730511211, 0.0], [-79.31138588668256, 43.66476137660686, 0.0], [-79.31132540414107, 43.66475071120564, 0.0], [-79.31126098050049, 43.66473653957549, 0.0], [-79.31119261576083, 43.66471886171641, 0.0], [-79.31112030992207, 43.664697677628396, 0.0], [-79.31104406298422, 43.664672987311455, 0.0], [-79.31097318187317, 43.664643176511476, 0.0], [-79.31090766658889, 43.664608245228436, 0.0], [-79.31084751713142, 43.66456819346237, 0.0], [-79.31079273350073, 43.66452302121327, 0.0], [-79.31074321251047, 43.66447817266261, 0.0], [-79.31069895416063, 43.6644336478104, 0.0], [-79.3106599584512, 43.664389446656635, 0.0], [-79.31062622538215, 43.664345569201316, 0.0], [-79.31060066341963, 43.66431233151279, 0.0], [-79.31058327256363, 43.664289733591055, 0.0], [-79.31057405281412, 43.66427777543611, 0.0], [-79.31057300417112, 43.66427645704796, 0.0], [-79.31056983423937, 43.66427163471727, 0.0], [-79.3105645430189, 43.66426330844403, 0.0], [-79.31055713050968, 43.66425147822824, 0.0], [-79.31054759671173, 43.66423614406991, 0.0], [-79.3105440720376, 43.66421843646329, 0.0], [-79.31054655648732, 43.664198355408374, 0.0], [-79.31055505006087, 43.664175900905164, 0.0], [-79.31056955275827, 43.66415107295366, 0.0], [-79.31058346475852, 43.66413285309315, 0.0], [-79.31059678606167, 43.664121241323635, 0.0], [-79.31060951666768, 43.6641162376451, 0.0], [-79.31062165657657, 43.66411784205756, 0.0], [-79.31063547736595, 43.66412851363947, 0.0], [-79.31065097903583, 43.66414825239083, 0.0], [-79.31066816158618, 43.664177058311644, 0.0], [-79.31068702501702, 43.6642149314019, 0.0], [-79.31071199376603, 43.66425551647964, 0.0], [-79.3107430678332, 43.66429881354487, 0.0], [-79.31078024721855, 43.664344822597556, 0.0], [-79.31082353192208, 43.664393543637715, 0.0], [-79.31087131371497, 43.66443997170637, 0.0], [-79.3109235925972, 43.66448410680353, 0.0], [-79.31098036856883, 43.66452594892917, 0.0], [-79.31104164162981, 43.664565498083306, 0.0], [-79.31110604564287, 43.66460004791897, 0.0], [-79.311173580608, 43.66462959843615, 0.0], [-79.3112442465252, 43.664654149634856, 0.0], [-79.31131804339446, 43.664673701515085, 0.0], [-79.311385605088, 43.664690941465416, 0.0], [-79.3114469316058, 43.66470586948584, 0.0], [-79.31150202294788, 43.66471848557637, 0.0], [-79.31155087911421, 43.664728789737005, 0.0], [-79.31157829918466, 43.664738588403154, 0.0], [-79.3115842831592, 43.6647478815748, 0.0], [-79.31156883103786, 43.66475666925197, 0.0]]]]}}, {"type": "Feature", "properties": {"fid": 7, "Name": "York University", "address": "4700 Keele St.,  North York", "on_official_list": true, "alert": null, "description": "Scattered across campus.", "trees": "", "verification": "City of Toronto lists 100 trees across the campus and points to York's own interactive map; I used York's map to identify the main grove along Arboretum Lane.", "reliability": "high", "bloom_2026": "unknown", "bloom_2026_note": "No 2026 sighting yet — bloom window estimated from Apr 26.", "bloom_offset_days": 4, "references": ["{ \"title\": \"City of Toronto — Cherry Blossoms\", \"url\": \"https:\\/\\/www.toronto.ca\\/explore-enjoy\\/festivals-events\\/cherry-blossoms\\/\" }", "{ \"title\": \"York University Cherry Trees campus map\", \"url\": \"https:\\/\\/map.concept3d.com\\/?id=1200#!ce\\/91416?ct\\/29093,91416?m\\/1013711?s\\/\" }"], "credit": "© 2026 Yujie Chen", "photos": [], "alert_source": null, "accessibility": ["Paved pathways", "TTC service", "Paid parking on campus"]}, "geometry": {"type": "MultiPolygon", "coordinates": [[[[-79.5096330397965, 43.77211150608552, 0.0], [-79.50940637677995, 43.7721593614963, 0.0], [-79.50923080404169, 43.77218922837725, 0.0], [-79.50910632158174, 43.772201106728374, 0.0], [-79.5090329294001, 43.77219499654968, 0.0], [-79.50901062749678, 43.77217089784116, 0.0], [-79.50905235929451, 43.77213972668645, 0.0], [-79.50915812479334, 43.77210148308556, 0.0], [-79.50932792399323, 43.77205616703847, 0.0], [-79.50956175689419, 43.7720037785452, 0.0], [-79.50973756167514, 43.77196447462583, 0.0], [-79.50985533833608, 43.771938255280375, 0.0], [-79.50991508687702, 43.77192512050883, 0.0], [-79.50991680729794, 43.7719250703112, 0.0], [-79.50992416487065, 43.77192837246176, 0.0], [-79.50993715959515, 43.7719350269605, 0.0], [-79.50995579147147, 43.771945033807434, 0.0], [-79.50998006049956, 43.77195839300256, 0.0], [-79.5099955479131, 43.77197224309729, 0.0], [-79.5100022537121, 43.771986584091614, 0.0], [-79.51000017789656, 43.77200141598554, 0.0], [-79.50998932046647, 43.77201673877907, 0.0], [-79.50992451163977, 43.77204019472691, 0.0], [-79.50980575141645, 43.77207178382906, 0.0], [-79.5096330397965, 43.77211150608552, 0.0]]], [[[-79.50635870955979, 43.7730189680738, 0.0], [-79.50634724982618, 43.773097005946006, 0.0], [-79.5063220919917, 43.773160899584546, 0.0], [-79.50628323605636, 43.77321064898942, 0.0], [-79.50623068202015, 43.773246254160625, 0.0], [-79.50616442988307, 43.77326771509817, 0.0], [-79.50610850415197, 43.773281577415695, 0.0], [-79.50606290482686, 43.773287841113195, 0.0], [-79.50602763190773, 43.77328650619068, 0.0], [-79.50600268539458, 43.77327757264815, 0.0], [-79.50600964010567, 43.77324823117444, 0.0], [-79.50604849604102, 43.77319848176957, 0.0], [-79.50611925320061, 43.77312832443352, 0.0], [-79.50622191158445, 43.7730377591663, 0.0], [-79.50629604043893, 43.77298934468394, 0.0], [-79.50634163976403, 43.77298308098644, 0.0], [-79.50635870955979, 43.7730189680738, 0.0]]], [[[-79.50898003610872, 43.77467973631269, 0.0], [-79.50898969956334, 43.77470764658432, 0.0], [-79.50898905989493, 43.7747355671314, 0.0], [-79.50897811710348, 43.77476349795395, 0.0], [-79.50895687118896, 43.77479143905195, 0.0], [-79.5089253221514, 43.774819390425414, 0.0], [-79.50889541561772, 43.77482986142308, 0.0], [-79.50886715158794, 43.77482285204494, 0.0], [-79.50884053006203, 43.774798362291, 0.0], [-79.50881555104, 43.77475639216126, 0.0], [-79.50879892815175, 43.77472228339918, 0.0], [-79.50879066139728, 43.77469603600477, 0.0], [-79.50879075077657, 43.77467764997802, 0.0], [-79.50879919628962, 43.774667125318935, 0.0], [-79.50881382097245, 43.77465841766774, 0.0], [-79.50883462482507, 43.77465152702443, 0.0], [-79.50886160784745, 43.77464645338901, 0.0], [-79.50889477003962, 43.77464319676148, 0.0], [-79.50892095590868, 43.77464072673365, 0.0], [-79.50894016545462, 43.77463904330552, 0.0], [-79.50895239867745, 43.77463814647709, 0.0], [-79.50895765557718, 43.77463803624835, 0.0], [-79.50896401411563, 43.77464493114471, 0.0], [-79.50897147429282, 43.77465883116616, 0.0], [-79.50898003610872, 43.77467973631269, 0.0]]], [[[-79.50200077638138, 43.775098277477625, 0.0], [-79.50215175971175, 43.775066263833466, 0.0], [-79.50226974375143, 43.77505542019621, 0.0], [-79.50235472850038, 43.77506574656586, 0.0], [-79.5024067139586, 43.7750972429424, 0.0], [-79.50242570012612, 43.77514990932585, 0.0], [-79.50240496303176, 43.77519686611513, 0.0], [-79.50234450267554, 43.77523811331025, 0.0], [-79.50224431905744, 43.7752736509112, 0.0], [-79.50210441217747, 43.77530347891799, 0.0], [-79.50199196636301, 43.77531322973657, 0.0], [-79.50190698161407, 43.77530290336692, 0.0], [-79.50184945793062, 43.77527249980906, 0.0], [-79.5018193953127, 43.77522201906298, 0.0], [-79.50183459418184, 43.775176155092375, 0.0], [-79.50189505453807, 43.775134907897254, 0.0], [-79.50200077638138, 43.775098277477625, 0.0]]], [[[-79.49490150148193, 43.77789256584343, 0.0], [-79.49488410052948, 43.777839415112666, 0.0], [-79.49490735692619, 43.77779100474868, 0.0], [-79.49497127067208, 43.77774733475148, 0.0], [-79.49507584176713, 43.777708405121054, 0.0], [-79.49522107021136, 43.77767421585741, 0.0], [-79.49532682897997, 43.77766226291497, 0.0], [-79.49539311807301, 43.77767254629374, 0.0], [-79.49541993749042, 43.77770506599372, 0.0], [-79.49540728723225, 43.77775982201491, 0.0], [-79.49536900523023, 43.777809035024106, 0.0], [-79.49530509148434, 43.7778527050213, 0.0], [-79.49521554599461, 43.77789083200652, 0.0], [-79.49510036876102, 43.77792341597974, 0.0], [-79.49500963559771, 43.77793456627697, 0.0], [-79.49494334650467, 43.7779242828982, 0.0], [-79.49490150148193, 43.77789256584343, 0.0]]]]}}, {"type": "Feature", "properties": {"fid": 8, "Name": "Exhibition Place", "address": "100 Princes Blvd., Toronto", "on_official_list": true, "alert": null, "description": "Trees in clusters at Manitoba Dr & Canada Blvd, Princess Margaret Fountain, and Yukon Place, plus additional scattered trees across the grounds.", "trees": "93 trees total (including recent plantings in 2024).", "verification": "City of Toronto provides four precise pins (Manitoba Drive and Canada Boulevard, Princess Margaret Fountain, Prince Edward Island Crescent, Yukon Place). Trees are dispersed across the grounds rather than clustered.", "reliability": "high", "bloom_2026": "blooming", "bloom_2026_note": "Bloom observed Apr 25, 2026.", "bloom_offset_days": 0, "references": ["{ \"title\": \"City of Toronto — Cherry Blossoms\", \"url\": \"https:\\/\\/www.toronto.ca\\/explore-enjoy\\/festivals-events\\/cherry-blossoms\\/\" }", "{ \"title\": \"Hunt for Exhibition Place cherry blossoms (2018)\", \"url\": \"https:\\/\\/www.explace.on.ca\\/news\\/general\\/map-on-the-hunt-for-the-exhibition-place-cherry-blossoms\\/\" }"], "credit": "© 2026 Yujie Chen", "photos": [], "alert_source": null, "bloom_2026_observations": [{"date": "2026-04-25", "stage": "bloom", "source": "Instagram"}], "accessibility": ["Paved pathways", "Paid parking on site", "TTC and GO transit nearby"]}, "geometry": {"type": "MultiPolygon", "coordinates": [[[[-79.42618774666091, 43.63041082857133, 0.0], [-79.42625719561003, 43.630432068883884, 0.0], [-79.42636153801614, 43.630466813116776, 0.0], [-79.42650077387925, 43.63051506127002, 0.0], [-79.42667490319938, 43.630576813343616, 0.0], [-79.42688392597651, 43.630652069337565, 0.0], [-79.42704062788506, 43.63071551808792, 0.0], [-79.42714500892502, 43.63076715959466, 0.0], [-79.42719706909641, 43.63080699385782, 0.0], [-79.42719680839922, 43.63083502087737, 0.0], [-79.4271706350035, 43.63085878345778, 0.0], [-79.42711854890926, 43.63087828159905, 0.0], [-79.4270405501165, 43.63089351530117, 0.0], [-79.42693663862524, 43.63090448456414, 0.0], [-79.42682931006517, 43.630904433979055, 0.0], [-79.42671856443633, 43.630893363545894, 0.0], [-79.42660440173871, 43.63087127326466, 0.0], [-79.42648682197232, 43.630838163135365, 0.0], [-79.42637231857704, 43.63080014855564, 0.0], [-79.42626089155289, 43.6307572295255, 0.0], [-79.42615254089985, 43.630709406044936, 0.0], [-79.42604726661791, 43.63065667811394, 0.0], [-79.42597071538584, 43.630609983802366, 0.0], [-79.42592288720364, 43.63056932311023, 0.0], [-79.42590378207127, 43.630534696037515, 0.0], [-79.42591339998877, 43.63050610258422, 0.0], [-79.42593034757516, 43.630479392225396, 0.0], [-79.42595462483045, 43.63045456496103, 0.0], [-79.42598623175462, 43.63043162079112, 0.0], [-79.42602516834768, 43.630410559715685, 0.0], [-79.42607173302974, 43.63040007398724, 0.0], [-79.42612592580082, 43.630400163605785, 0.0], [-79.42618774666091, 43.63041082857133, 0.0]]], [[[-79.42375845534863, 43.631991034990605, 0.0], [-79.42368088667484, 43.63200957683848, 0.0], [-79.42362374899778, 43.63201818242919, 0.0], [-79.42358704231748, 43.63201685176275, 0.0], [-79.42357076663394, 43.63200558483914, 0.0], [-79.42357492194716, 43.63198438165838, 0.0], [-79.42358553525807, 43.63195994497958, 0.0], [-79.4236026065667, 43.63193227480274, 0.0], [-79.42362613587301, 43.631901371127874, 0.0], [-79.42365612317704, 43.63186723395497, 0.0], [-79.4237064323809, 43.631836096851416, 0.0], [-79.42377706348461, 43.63180795981721, 0.0], [-79.42386801648816, 43.63178282285235, 0.0], [-79.42397929139155, 43.63176068595684, 0.0], [-79.4240643088389, 43.63174914164222, 0.0], [-79.4241230688302, 43.63174818990847, 0.0], [-79.42415557136546, 43.6317578307556, 0.0], [-79.42416181644468, 43.63177806418362, 0.0], [-79.42416276160087, 43.631798932911245, 0.0], [-79.42415840683404, 43.63182043693847, 0.0], [-79.42414875214418, 43.63184257626529, 0.0], [-79.42413379753127, 43.63186535089172, 0.0], [-79.42410779674331, 43.63188641369826, 0.0], [-79.4240707497803, 43.6319057646849, 0.0], [-79.42402265664222, 43.63192340385165, 0.0], [-79.42396351732907, 43.63193933119851, 0.0], [-79.42389977067577, 43.63195591217062, 0.0], [-79.42383141668228, 43.63197314676798, 0.0], [-79.42375845534863, 43.631991034990605, 0.0]]], [[[-79.42249709965519, 43.63233599834103, 0.0], [-79.42248406814302, 43.63234266020079, 0.0], [-79.42247045719711, 43.6323430489226, 0.0], [-79.42245626681745, 43.632337164506446, 0.0], [-79.42244149700406, 43.632325006952335, 0.0], [-79.42242614775694, 43.63230657626027, 0.0], [-79.4224032383733, 43.63228962723773, 0.0], [-79.42237276885317, 43.63227415988472, 0.0], [-79.42233473919651, 43.63226017420124, 0.0], [-79.42228914940335, 43.63224767018729, 0.0], [-79.42224385793659, 43.632237695202384, 0.0], [-79.4221988647962, 43.63223024924652, 0.0], [-79.42215416998224, 43.632225332319706, 0.0], [-79.42210977349464, 43.63222294442194, 0.0], [-79.42206325792397, 43.63222372248305, 0.0], [-79.42201462327019, 43.63222766650304, 0.0], [-79.4219638695333, 43.63223477648193, 0.0], [-79.42191099671334, 43.63224505241969, 0.0], [-79.42186789660954, 43.63225071618383, 0.0], [-79.42183456922194, 43.632251767774356, 0.0], [-79.42181101455054, 43.63224820719124, 0.0], [-79.42179723259531, 43.63224003443449, 0.0], [-79.42180337756378, 43.63222939728659, 0.0], [-79.42182944945594, 43.632216295747526, 0.0], [-79.42187544827178, 43.6322007298173, 0.0], [-79.4219413740113, 43.63218269949592, 0.0], [-79.422010747112, 43.63216153457736, 0.0], [-79.42208356757388, 43.632137235061606, 0.0], [-79.42215983539693, 43.63210980094867, 0.0], [-79.42223955058115, 43.63207923223856, 0.0], [-79.42230543237602, 43.632055800963, 0.0], [-79.42235748078154, 43.632039507122, 0.0], [-79.4223956957977, 43.63203035071554, 0.0], [-79.42242007742452, 43.632028331743626, 0.0], [-79.4224421134608, 43.6320456114063, 0.0], [-79.42246180390654, 43.63208218970354, 0.0], [-79.42247914876177, 43.63213806663536, 0.0], [-79.42249414802644, 43.632213242201786, 0.0], [-79.42250213959692, 43.63227128934153, 0.0], [-79.42250312347316, 43.6323122080546, 0.0], [-79.42249709965519, 43.63233599834103, 0.0]]], [[[-79.42004863574533, 43.631036283020116, 0.0], [-79.42003732951449, 43.631030204509294, 0.0], [-79.42002383864292, 43.6310281080239, 0.0], [-79.42000816313069, 43.63102999356394, 0.0], [-79.41999030297774, 43.631035861129426, 0.0], [-79.41997025818407, 43.63104571072034, 0.0], [-79.41994604871704, 43.631054993071984, 0.0], [-79.41991767457664, 43.63106370818436, 0.0], [-79.41988513576285, 43.631071856057446, 0.0], [-79.41984843227569, 43.63107943669125, 0.0], [-79.41981846778819, 43.63108125546473, 0.0], [-79.41979524230037, 43.63107731237786, 0.0], [-79.4197787558122, 43.63106760743065, 0.0], [-79.41976900832368, 43.6310521406231, 0.0], [-79.41977070923997, 43.631035236951234, 0.0], [-79.41978385856103, 43.63101689641506, 0.0], [-79.41980845628687, 43.63099711901457, 0.0], [-79.41984450241749, 43.63097590474977, 0.0], [-79.41987769331725, 43.630960072281255, 0.0], [-79.41990802898614, 43.63094962160905, 0.0], [-79.41993550942418, 43.630944552733126, 0.0], [-79.41996013463135, 43.63094486565349, 0.0], [-79.41998147761531, 43.63094743536978, 0.0], [-79.41999953837606, 43.63095226188196, 0.0], [-79.4200143169136, 43.63095934519006, 0.0], [-79.42002581322792, 43.630968685294064, 0.0], [-79.42003584405069, 43.63097960945559, 0.0], [-79.42004440938186, 43.63099211767463, 0.0], [-79.42005150922148, 43.63100620995119, 0.0], [-79.42005714356955, 43.63102188628526, 0.0], [-79.42005854277286, 43.631032123908106, 0.0], [-79.42005570683148, 43.631036922819725, 0.0], [-79.42004863574533, 43.631036283020116, 0.0]]], [[[-79.42210814549023, 43.63280649094909, 0.0], [-79.42210488032924, 43.63282747633792, 0.0], [-79.42209972470158, 43.63284408020789, 0.0], [-79.42209267860724, 43.63285630255898, 0.0], [-79.42208374204618, 43.6328641433912, 0.0], [-79.42207291501843, 43.632867602704565, 0.0], [-79.42205637471602, 43.63285634141016, 0.0], [-79.42203412113894, 43.63283035950798, 0.0], [-79.42200615428719, 43.63278965699805, 0.0], [-79.42197247416078, 43.632734233880356, 0.0], [-79.42194147357559, 43.632681426374546, 0.0], [-79.42191315253162, 43.63263123448062, 0.0], [-79.42188751102887, 43.632583658198584, 0.0], [-79.42186454906732, 43.632538697528446, 0.0], [-79.42185297355654, 43.6325071062942, 0.0], [-79.42185278449648, 43.63248888449587, 0.0], [-79.42186398188717, 43.63248403213344, 0.0], [-79.4218865657286, 43.632492549206916, 0.0], [-79.42191278564898, 43.63250757991331, 0.0], [-79.42194264164831, 43.63252912425262, 0.0], [-79.42197613372662, 43.63255718222484, 0.0], [-79.42201326188385, 43.632591753829985, 0.0], [-79.42204386357129, 43.632625895135604, 0.0], [-79.4220679387889, 43.63265960614169, 0.0], [-79.4220854875367, 43.632692886848254, 0.0], [-79.4220965098147, 43.63272573725529, 0.0], [-79.42210396023295, 43.63275562140778, 0.0], [-79.42210783879145, 43.632782539305715, 0.0], [-79.42210814549023, 43.63280649094909, 0.0]]], [[[-79.40992055634067, 43.63649305358959, 0.0], [-79.40990472683092, 43.636442119439366, 0.0], [-79.40990056734908, 43.636399239733294, 0.0], [-79.40990807789514, 43.63636441447137, 0.0], [-79.40992725846908, 43.636337643653604, 0.0], [-79.4099581090709, 43.63631892728, 0.0], [-79.41000718503211, 43.63630658498443, 0.0], [-79.41007448635273, 43.636300616766896, 0.0], [-79.41016001303272, 43.63630102262741, 0.0], [-79.41026376507212, 43.63630780256597, 0.0], [-79.41033742343646, 43.63631993864124, 0.0], [-79.41038098812574, 43.63633743085322, 0.0], [-79.41039445913997, 43.636360279201924, 0.0], [-79.41037783647914, 43.63638848368734, 0.0], [-79.41035944042864, 43.636409859069154, 0.0], [-79.41033927098847, 43.63642440534736, 0.0], [-79.41031732815863, 43.63643212252197, 0.0], [-79.4102936119391, 43.63643301059297, 0.0], [-79.41025621621168, 43.636442121153436, 0.0], [-79.41020514097633, 43.63645945420337, 0.0], [-79.41014038623311, 43.63648500974276, 0.0], [-79.41006195198196, 43.636518787771635, 0.0], [-79.40999916891619, 43.636531387755724, 0.0], [-79.40995203703574, 43.63652280969504, 0.0], [-79.40992055634067, 43.63649305358959, 0.0]]]]}}, {"type": "Feature", "properties": {"fid": 9, "Name": "University of Toronto Scarborough Campus", "address": "1265 Military Tr.,  Scarborough", "on_official_list": true, "alert": null, "description": "In front of the Humanities Wing (Sakura grove).", "trees": "50 trees planted.", "verification": "City of Toronto lists the trees in front of the Humanities Wing. I confirmed the Sakura Grove via Google Street View and photos.", "reliability": "high", "bloom_2026": "unknown", "bloom_2026_note": "No 2026 sighting yet — bloom window estimated from Apr 26.", "bloom_offset_days": 4, "references": ["{ \"title\": \"City of Toronto — Cherry Blossoms\", \"url\": \"https:\\/\\/www.toronto.ca\\/explore-enjoy\\/festivals-events\\/cherry-blossoms\\/\" }"], "credit": "© 2026 Yujie Chen", "photos": [], "alert_source": null, "accessibility": []}, "geometry": {"type": "MultiPolygon", "coordinates": [[[[-79.18665700834961, 43.78294035470637, 0.0], [-79.18666705409767, 43.7829424742567, 0.0], [-79.18668032022156, 43.782946882068444, 0.0], [-79.18669680672126, 43.782953578141615, 0.0], [-79.18671651359678, 43.78296256247621, 0.0], [-79.18673944084813, 43.78297383507223, 0.0], [-79.1867574712571, 43.782984696287436, 0.0], [-79.18677060482368, 43.782995146121834, 0.0], [-79.18677884154789, 43.78300518457543, 0.0], [-79.18678218142975, 43.78301481164822, 0.0], [-79.1867832821944, 43.78302932648241, 0.0], [-79.18678214384184, 43.783048729078004, 0.0], [-79.18677876637209, 43.78307301943501, 0.0], [-79.18677314978514, 43.78310219755341, 0.0], [-79.18676516374566, 43.783135487572814, 0.0], [-79.18675480825362, 43.783172889493216, 0.0], [-79.18674208330907, 43.78321440331462, 0.0], [-79.18672698891196, 43.78326002903702, 0.0], [-79.18670850849072, 43.78329853396509, 0.0], [-79.18668664204536, 43.78332991809883, 0.0], [-79.18666138957586, 43.783354181438234, 0.0], [-79.18663275108226, 43.78337132398331, 0.0], [-79.18660331228364, 43.7833852600653, 0.0], [-79.18657307318, 43.78339598968422, 0.0], [-79.18654203377136, 43.78340351284005, 0.0], [-79.18651019405772, 43.783407829532806, 0.0], [-79.18646850904648, 43.78340209540932, 0.0], [-79.18641697873764, 43.783386310469595, 0.0], [-79.18635560313118, 43.78336047471363, 0.0], [-79.18628438222709, 43.78332458814143, 0.0], [-79.1862384307615, 43.78328889333766, 0.0], [-79.18621774873439, 43.78325339030232, 0.0], [-79.18622233614579, 43.78321807903541, 0.0], [-79.18625219299565, 43.78318295953693, 0.0], [-79.18628394032916, 43.783150374146246, 0.0], [-79.1863175781463, 43.78312032286336, 0.0], [-79.18635310644706, 43.783092805688284, 0.0], [-79.18639052523146, 43.78306782262101, 0.0], [-79.18642730155476, 43.78304440154985, 0.0], [-79.18646343541698, 43.78302254247484, 0.0], [-79.1864989268181, 43.783002245395934, 0.0], [-79.18653377575812, 43.782983510313166, 0.0], [-79.1865634056231, 43.78296831948183, 0.0], [-79.18658781641304, 43.78295667290193, 0.0], [-79.18660700812792, 43.78294857057347, 0.0], [-79.18662098076776, 43.782944012496436, 0.0], [-79.18663397168464, 43.78294112382625, 0.0], [-79.18664598087861, 43.78293990456288, 0.0], [-79.18665700834961, 43.78294035470637, 0.0]]]]}}, {"type": "Feature", "properties": {"fid": 10, "Name": "Toronto Island Park", "address": "Take the ferry at 9 Queens Quay W.,  Toronto", "on_official_list": true, "alert": null, "description": "Cherry trees are located beside the William Meany Maze.", "trees": "Trees were planted in 2011.", "verification": "City of Toronto's pin is beside the William Meany Maze. I mapped the polygon using the Waterfront BIA article, Street View, and on-the-ground video.", "reliability": "high", "bloom_2026": "unknown", "bloom_2026_note": "Bloom not confirmed for 2026.", "bloom_offset_days": 7, "references": ["{ \"title\": \"City of Toronto — Cherry Blossoms\", \"url\": \"https:\\/\\/www.toronto.ca\\/explore-enjoy\\/festivals-events\\/cherry-blossoms\\/\" }", "{ \"title\": \"Cherry Blossoms on Centre Island (Waterfront BIA)\", \"url\": \"https:\\/\\/www.waterfrontbia.com\\/stories\\/cherry-blossoms-toronto-centre-island\" }", "{ \"title\": \"Centre Island cherry blossoms (YouTube)\", \"url\": \"https:\\/\\/www.youtube.com\\/watch?v=QicRzbjjAtQ\" }"], "credit": "© 2026 Yujie Chen", "photos": [], "alert_source": null, "accessibility": ["Level paved pathways to the trees", "Accessible washrooms nearby"]}, "geometry": {"type": "MultiPolygon", "coordinates": [[[[-79.37563058849388, 43.61711050073319, 0.0], [-79.37563467200425, 43.6170708535983, 0.0], [-79.3756400529816, 43.617021772765284, 0.0], [-79.37564673142587, 43.61696325823415, 0.0], [-79.37565470733713, 43.61689531000488, 0.0], [-79.37566398071533, 43.61681792807748, 0.0], [-79.3756775371504, 43.616762724211725, 0.0], [-79.37569537664228, 43.61672969840761, 0.0], [-79.37571749919104, 43.61671885066514, 0.0], [-79.37574390479664, 43.61673018098429, 0.0], [-79.37576285211777, 43.616754738076935, 0.0], [-79.37577434115445, 43.61679252194307, 0.0], [-79.37577837190666, 43.616843532582685, 0.0], [-79.37577494437438, 43.616907769995784, 0.0], [-79.375770200436, 43.61696947505742, 0.0], [-79.37576414009149, 43.61702864776758, 0.0], [-79.37575676334085, 43.617085288126276, 0.0], [-79.37574807018406, 43.61713939613351, 0.0], [-79.37573463986519, 43.61717681546963, 0.0], [-79.37571647238423, 43.61719754613463, 0.0], [-79.37569356774117, 43.61720158812854, 0.0], [-79.37566592593603, 43.61718894145134, 0.0], [-79.37564621545977, 43.61716954465971, 0.0], [-79.37563443631237, 43.61714339775366, 0.0], [-79.37563058849388, 43.61711050073319, 0.0]]], [[[-79.37532176763757, 43.6179661275222, 0.0], [-79.3750802133117, 43.61808326569122, 0.0], [-79.37488723187728, 43.618164725064474, 0.0], [-79.37474282333432, 43.61821050564197, 0.0], [-79.37464698768282, 43.61822060742371, 0.0], [-79.37459972492279, 43.618195030409694, 0.0], [-79.37462957032649, 43.61814523618092, 0.0], [-79.37473652389393, 43.61807122473739, 0.0], [-79.3749205856251, 43.61797299607909, 0.0], [-79.37518175552002, 43.61785055020603, 0.0], [-79.37538454473895, 43.61776643698076, 0.0], [-79.37552895328191, 43.617720656403264, 0.0], [-79.3756149811489, 43.617713208473546, 0.0], [-79.37564262833989, 43.617744093191604, 0.0], [-79.37560297515168, 43.6177965412724, 0.0], [-79.37549602158424, 43.61787055271593, 0.0], [-79.37532176763757, 43.6179661275222, 0.0]]]]}}, {"type": "Feature", "properties": {"fid": 11, "Name": "John P. Robarts Research Library", "address": "130 St. George St., Toronto", "on_official_list": true, "alert": null, "description": "Corner of Huron Street and Harbord Street along the walking path.", "trees": "70 trees planted in 2005.", "verification": "City of Toronto's location is precise. I confirmed it from Google images.", "reliability": "high", "bloom_2026": "blooming", "bloom_2026_note": "Bloom observed Apr 24, 2026.", "bloom_offset_days": 0, "references": ["{ \"title\": \"City of Toronto — Cherry Blossoms\", \"url\": \"https:\\/\\/www.toronto.ca\\/explore-enjoy\\/festivals-events\\/cherry-blossoms\\/\" }"], "credit": "© 2026 Yujie Chen", "photos": [], "alert_source": null, "bloom_2026_observations": [{"date": "2026-04-24", "stage": "bloom", "source": "Instagram"}], "accessibility": []}, "geometry": {"type": "MultiPolygon", "coordinates": [[[[-79.39920664170954, 43.66390649180299, 0.0], [-79.39918779539903, 43.66387869909085, 0.0], [-79.399168630725, 43.66385731491766, 0.0], [-79.39914914768742, 43.6638423392834, 0.0], [-79.39912934628633, 43.66383377218808, 0.0], [-79.3991092265217, 43.6638316136317, 0.0], [-79.39909307652685, 43.663829407613356, 0.0], [-79.39908089630177, 43.66382715413306, 0.0], [-79.39907268584648, 43.663824853190796, 0.0], [-79.39906844516095, 43.66382250478657, 0.0], [-79.3990647452465, 43.66381805635077, 0.0], [-79.3990615861031, 43.66381150788338, 0.0], [-79.39905896773078, 43.66380285938442, 0.0], [-79.39905689012954, 43.66379211085387, 0.0], [-79.3990767265878, 43.66378011567335, 0.0], [-79.39911847710556, 43.663766873842846, 0.0], [-79.39918214168283, 43.66375238536238, 0.0], [-79.3992677203196, 43.66373665023194, 0.0], [-79.39933499433525, 43.66373077488098, 0.0], [-79.39938396372978, 43.66373475930951, 0.0], [-79.39941462850317, 43.66374860351753, 0.0], [-79.39942698865545, 43.66377230750502, 0.0], [-79.39943624024714, 43.66379701473906, 0.0], [-79.39944238327828, 43.663822725219646, 0.0], [-79.39944541774885, 43.66384943894676, 0.0], [-79.39944534365885, 43.66387715592042, 0.0], [-79.39943214300706, 43.6638997842438, 0.0], [-79.3994058157935, 43.66391732391692, 0.0], [-79.39936636201816, 43.66392977493976, 0.0], [-79.399313781681, 43.66393713731233, 0.0], [-79.39926963485053, 43.66393571091373, 0.0], [-79.3992339215267, 43.663925495743946, 0.0], [-79.39920664170954, 43.66390649180299, 0.0]]]]}}, {"type": "Feature", "properties": {"fid": 12, "Name": "Legislative Assembly of Ontario", "address": "111 Wellesley St. W., Toronto", "on_official_list": true, "alert": null, "description": "Around the grounds of the Legislative Assembly.", "trees": "3 cherry trees gifted in 2005.", "verification": "City of Toronto's location is precise. I confirmed it from Google images.", "reliability": "high", "bloom_2026": "blooming", "bloom_2026_note": "Bloom observed Apr 26, 2026.", "bloom_offset_days": 0, "references": ["{ \"title\": \"City of Toronto — Cherry Blossoms\", \"url\": \"https:\\/\\/www.toronto.ca\\/explore-enjoy\\/festivals-events\\/cherry-blossoms\\/\" }"], "credit": "© 2026 Yujie Chen", "photos": [], "alert_source": null, "bloom_2026_observations": [{"date": "2026-04-26", "stage": "bloom", "source": "Instagram"}], "accessibility": []}, "geometry": {"type": "MultiPolygon", "coordinates": [[[[-79.39080667051961, 43.6621122151775, 0.0], [-79.39081418363983, 43.66213754529587, 0.0], [-79.39080888820165, 43.66215855147357, 0.0], [-79.39079078420504, 43.662175233710585, 0.0], [-79.39075987165, 43.66218759200694, 0.0], [-79.39071615053656, 43.66219562636261, 0.0], [-79.39067747141968, 43.662193113150686, 0.0], [-79.39064383429934, 43.662180052371156, 0.0], [-79.39061523917559, 43.66215644402403, 0.0], [-79.3905916860484, 43.6621222881093, 0.0], [-79.3905731617863, 43.66209331532127, 0.0], [-79.39055966638935, 43.662069525659945, 0.0], [-79.3905511998575, 43.66205091912532, 0.0], [-79.39054776219075, 43.66203749571739, 0.0], [-79.3905533459967, 43.66202719862724, 0.0], [-79.39056795127529, 43.662020027854865, 0.0], [-79.39059157802656, 43.66201598340025, 0.0], [-79.39062422625048, 43.66201506526342, 0.0], [-79.39065635005923, 43.66201815990716, 0.0], [-79.39068794945281, 43.66202526733146, 0.0], [-79.3907190244312, 43.66203638753633, 0.0], [-79.39074957499443, 43.662051520521786, 0.0], [-79.39077436619691, 43.662069202790455, 0.0], [-79.39079339803862, 43.66208943434236, 0.0], [-79.39080667051961, 43.6621122151775, 0.0]]]]}}, {"type": "Feature", "properties": {"fid": 13, "Name": "Trinity Bellwoods Park", "address": "790 Queen St. W., Toronto", "on_official_list": true, "alert": null, "description": "Near the central park paths.", "trees": "", "verification": "City of Toronto's location is precise. I confirmed it via Google Street View and photos.", "reliability": "high", "bloom_2026": "blooming", "bloom_2026_note": "Bloom observed Apr 25, 2026.", "bloom_offset_days": 0, "references": ["{ \"title\": \"City of Toronto — Cherry Blossoms\", \"url\": \"https:\\/\\/www.toronto.ca\\/explore-enjoy\\/festivals-events\\/cherry-blossoms\\/\" }"], "credit": "© 2026 Yujie Chen", "photos": [], "alert_source": null, "bloom_2026_observations": [{"date": "2026-04-25", "stage": "bloom", "source": "Instagram"}], "accessibility": []}, "geometry": {"type": "MultiPolygon", "coordinates": [[[[-79.41186225521383, 43.64573974127866, 0.0], [-79.41189529129845, 43.64572684205055, 0.0], [-79.41192727229982, 43.64571770483578, 0.0], [-79.41195819821796, 43.64571232963435, 0.0], [-79.41198806905285, 43.64571071644627, 0.0], [-79.4120168848045, 43.64571286527153, 0.0], [-79.41208728247919, 43.645720800230364, 0.0], [-79.41219926207692, 43.64573452132277, 0.0], [-79.4123528235977, 43.64575402854875, 0.0], [-79.41254796704152, 43.64577932190828, 0.0], [-79.41272971234785, 43.64580698814114, 0.0], [-79.41289805951672, 43.645837027247325, 0.0], [-79.41305300854809, 43.64586943922681, 0.0], [-79.413194559442, 43.6459042240796, 0.0], [-79.41329126368473, 43.64593587363991, 0.0], [-79.41334312127627, 43.645964387907725, 0.0], [-79.41335013221664, 43.64598976688305, 0.0], [-79.41331229650584, 43.64601201056587, 0.0], [-79.41326870609959, 43.646036617121275, 0.0], [-79.41321936099789, 43.646063586549246, 0.0], [-79.41316426120076, 43.64609291884981, 0.0], [-79.4131034067082, 43.64612461402296, 0.0], [-79.41298280184613, 43.646122568736445, 0.0], [-79.41280244661453, 43.64608678299029, 0.0], [-79.41256234101344, 43.64601725678448, 0.0], [-79.41226248504283, 43.64591399011901, 0.0], [-79.41204585208602, 43.6458333153129, 0.0], [-79.41191244214303, 43.64577523236611, 0.0], [-79.41186225521383, 43.64573974127866, 0.0]]]]}}, {"type": "Feature", "properties": {"fid": 14, "Name": "Cedar Ridge Park", "address": "225 Confederation Dr.,  Scarborough", "on_official_list": true, "alert": null, "description": "Cherry trees are located north of Cedar Ridge Creative Centre.", "trees": "Five cherry trees.", "verification": "City of Toronto lists only five trees north of the Cedar Ridge Creative Centre. With no on-the-ground imagery available, this polygon is approximate and the current condition is unconfirmed.", "reliability": "low", "bloom_2026": "unknown", "bloom_2026_note": "No 2026 sighting yet — bloom window estimated from Apr 26.", "bloom_offset_days": 4, "references": ["{ \"title\": \"City of Toronto — Cherry Blossoms\", \"url\": \"https:\\/\\/www.toronto.ca\\/explore-enjoy\\/festivals-events\\/cherry-blossoms\\/\" }"], "credit": "© 2026 Yujie Chen", "photos": [], "alert_source": null, "accessibility": ["Interlock driveway from parking lot to tree location"]}, "geometry": {"type": "MultiPolygon", "coordinates": [[[[-79.20713794610369, 43.75782245322881, 0.0], [-79.20708318687939, 43.757833427427826, 0.0], [-79.20703700573888, 43.75783679929583, 0.0], [-79.20699940268217, 43.757832568832825, 0.0], [-79.20697037770925, 43.757820736038816, 0.0], [-79.20694993082013, 43.7578013009138, 0.0], [-79.20692912664451, 43.757778169220586, 0.0], [-79.20690796518241, 43.75775134095917, 0.0], [-79.2068864464338, 43.757720816129556, 0.0], [-79.20686457039871, 43.757686594731744, 0.0], [-79.206866024502, 43.75765466324984, 0.0], [-79.20689080874374, 43.757625021683836, 0.0], [-79.20693892312384, 43.75759767003374, 0.0], [-79.20701036764237, 43.757572608299554, 0.0], [-79.20708397944402, 43.75755755094867, 0.0], [-79.20715975852882, 43.757552497981095, 0.0], [-79.20723770489676, 43.75755744939683, 0.0], [-79.20731781854782, 43.757572405195866, 0.0], [-79.20736428478085, 43.75759681910989, 0.0], [-79.20737710359586, 43.75763069113889, 0.0], [-79.20735627499282, 43.757674021282874, 0.0], [-79.20730179897174, 43.75772680954184, 0.0], [-79.20724725214987, 43.75776914428582, 0.0], [-79.20719263452717, 43.75780102551481, 0.0], [-79.20713794610369, 43.75782245322881, 0.0]]]]}}, {"type": "Feature", "properties": {"fid": 15, "Name": "Centennial Park Etobicoke", "address": "151 Elmcrest Rd.,  Etobicoke", "on_official_list": true, "alert": null, "description": "Cherry trees are located along Rathburn Road and Centennial Park Boulevard. Additional possible clusters near Centennial Park Conservatory (limited confirmation).", "trees": "463 trees planted between 2002 – 2011.", "verification": "City of Toronto describes three planting zones — along Rathburn Road, on Centennial Park Boulevard, and northeast of the Centennial Park Conservatory. The first two are confirmed via Google Maps photos; the third is less certain.", "reliability": "medium", "bloom_2026": "unknown", "bloom_2026_note": "Bloom not confirmed for 2026.", "bloom_offset_days": 0, "references": ["{ \"title\": \"City of Toronto — Cherry Blossoms\", \"url\": \"https:\\/\\/www.toronto.ca\\/explore-enjoy\\/festivals-events\\/cherry-blossoms\\/\" }", "{ \"title\": \"Centennial Park Master Plan (UrbanToronto)\", \"url\": \"https:\\/\\/urbantoronto.ca\\/forum\\/threads\\/etobicoke-centennial-park-updated-masterplan.32347\\/\" }"], "credit": "© 2026 Yujie Chen", "photos": [], "alert_source": "City of Toronto Centennial Park Master Plan + UrbanToronto", "accessibility": ["No paved pathways", "Trees visible from road", "TTC service along Rathburn Road", "Free parking within Centennial Park (walking distance)"]}, "geometry": {"type": "MultiPolygon", "coordinates": [[[[-79.5837131080446, 43.6496931165894, 0.0], [-79.58365147002985, 43.6496655720858, 0.0], [-79.58400142188866, 43.649397356691914, 0.0], [-79.58476296362106, 43.64888847040774, 0.0], [-79.58593609522705, 43.64813891323328, 0.0], [-79.58752081670661, 43.64714868516853, 0.0], [-79.58876115572366, 43.646418027938346, 0.0], [-79.58965711227816, 43.64594694154272, 0.0], [-79.59020868637012, 43.64573542598166, 0.0], [-79.59041587799956, 43.64578348125516, 0.0], [-79.59060569210058, 43.64582433057526, 0.0], [-79.59077812867315, 43.64585797394196, 0.0], [-79.59093318771731, 43.64588441135525, 0.0], [-79.59107086923304, 43.64590364281513, 0.0], [-79.5912310869993, 43.64591589103216, 0.0], [-79.59141384101609, 43.64592115600634, 0.0], [-79.59161913128344, 43.64591943773765, 0.0], [-79.59184695780131, 43.645910736226114, 0.0], [-79.59206974463547, 43.64589901104255, 0.0], [-79.5922874917859, 43.64588426218697, 0.0], [-79.5925001992526, 43.64586648965937, 0.0], [-79.59270786703557, 43.64584569345975, 0.0], [-79.59289849510347, 43.64582753483948, 0.0], [-79.59307208345626, 43.645812013798576, 0.0], [-79.59322863209397, 43.64579913033704, 0.0], [-79.59336814101658, 43.64578888445486, 0.0], [-79.593524298943, 43.64578273848238, 0.0], [-79.59369710587322, 43.645780692419606, 0.0], [-79.59388656180724, 43.64578274626653, 0.0], [-79.59409266674504, 43.64578890002316, 0.0], [-79.59428829011355, 43.64580439390217, 0.0], [-79.59447343191272, 43.64582922790355, 0.0], [-79.59464809214259, 43.6458634020273, 0.0], [-79.59481227080312, 43.645906916273425, 0.0], [-79.59496912203497, 43.64595615789668, 0.0], [-79.59511864583811, 43.646011126897065, 0.0], [-79.59526084221255, 43.64607182327458, 0.0], [-79.59539571115829, 43.64613824702923, 0.0], [-79.59552550627868, 43.646210560428884, 0.0], [-79.59565022757371, 43.646288763473564, 0.0], [-79.5957698750434, 43.64637285616324, 0.0], [-79.59588444868774, 43.646462838497925, 0.0], [-79.59598338555462, 43.6465486273296, 0.0], [-79.59606668564406, 43.64663022265826, 0.0], [-79.59613434895607, 43.64670762448391, 0.0], [-79.59618637549062, 43.646780832806535, 0.0], [-79.59622011449248, 43.64683828771731, 0.0], [-79.59623556596166, 43.64687998921623, 0.0], [-79.59623272989813, 43.6469059373033, 0.0], [-79.59621160630189, 43.64691613197852, 0.0], [-79.59617440362464, 43.64690176300557, 0.0], [-79.59612112186637, 43.646862830384464, 0.0], [-79.59605176102707, 43.646799334115194, 0.0], [-79.59596632110673, 43.64671127419775, 0.0], [-79.59587903853887, 43.64662967130781, 0.0], [-79.59578991332347, 43.64655452544537, 0.0], [-79.59569894546054, 43.64648583661042, 0.0], [-79.59560613495009, 43.646423604802976, 0.0], [-79.59550359606395, 43.646364430936444, 0.0], [-79.59539132880214, 43.64630831501085, 0.0], [-79.59526933316465, 43.646255257026176, 0.0], [-79.59513760915148, 43.64620525698243, 0.0], [-79.59500537363395, 43.64615921060542, 0.0], [-79.59487262661209, 43.646117117895145, 0.0], [-79.59473936808584, 43.646078978851605, 0.0], [-79.59460559805525, 43.6460447934748, 0.0], [-79.59447498327764, 43.64601663588142, 0.0], [-79.59434752375299, 43.64599450607147, 0.0], [-79.59422321948134, 43.64597840404494, 0.0], [-79.59410207046264, 43.645968329801846, 0.0], [-79.59397303248178, 43.645961966975115, 0.0], [-79.59383610553874, 43.64595931556475, 0.0], [-79.59369128963351, 43.64596037557076, 0.0], [-79.59353858476612, 43.645965146993134, 0.0], [-79.59337500502076, 43.64597679759345, 0.0], [-79.59320055039747, 43.64599532737171, 0.0], [-79.59301522089622, 43.646020736327905, 0.0], [-79.59281901651704, 43.64605302446205, 0.0], [-79.59263204360617, 43.646084246606705, 0.0], [-79.59245430216365, 43.64611440276186, 0.0], [-79.59228579218943, 43.64614349292752, 0.0], [-79.59212651368354, 43.64617151710368, 0.0], [-79.5919851302047, 43.64619337866148, 0.0], [-79.5918616417529, 43.6462090776009, 0.0], [-79.59175604832815, 43.646218613921945, 0.0], [-79.59166834993044, 43.64622198762463, 0.0], [-79.59151359748626, 43.646226463934454, 0.0], [-79.59129179099558, 43.64623204285141, 0.0], [-79.59100293045844, 43.646238724375536, 0.0], [-79.59064701587482, 43.646246508506806, 0.0], [-79.59033024850369, 43.64625694085864, 0.0], [-79.59005262834505, 43.64627002143105, 0.0], [-79.58981415539888, 43.64628575022403, 0.0], [-79.58961482966521, 43.64630412723758, 0.0], [-79.58912094311506, 43.646530581284416, 0.0], [-79.58833249574849, 43.646965112364555, 0.0], [-79.58724948756546, 43.647607720477986, 0.0], [-79.585871918566, 43.6484584056247, 0.0], [-79.5848233323127, 43.64908953335885, 0.0], [-79.58410372880556, 43.649501103680414, 0.0], [-79.5837131080446, 43.6496931165894, 0.0]]]]}}, {"type": "Feature", "properties": {"fid": 16, "Name": "High Park", "address": "142 Colborne Lodge Dr.,  Toronto", "on_official_list": true, "alert": "Peak bloom period restricts all vehicle and parking access inside the park.", "description": "Multiple clusters: Cherry Blossom Hill, Hillside Gardens, Picnic Site #26, the east side of Grenadier Pond, and the High Park – Swansea area.", "trees": "Multiple plantings (2017 – 2018, plus older clusters).", "verification": "City of Toronto lists six tree-location areas across the park. I combined them by adapting the polygon from the official High Park cherry blossom Google My Map.", "reliability": "high", "bloom_2026": "blooming", "bloom_2026_note": "First open blossom seen Apr 25.  ≥70% peak bloom forecast around May 1, 2026.", "bloom_offset_days": 3, "references": ["{ \"title\": \"City of Toronto — Cherry Blossoms\", \"url\": \"https:\\/\\/www.toronto.ca\\/explore-enjoy\\/festivals-events\\/cherry-blossoms\\/\" }", "{ \"title\": \"High Park Nature Centre — Cherry Blossom Watch\", \"url\": \"https:\\/\\/highparknaturecentre.com\\/cherry-blossom-watch\\/\" }", "{ \"title\": \"High Park cherry blossom Google My Map\", \"url\": \"https:\\/\\/www.google.com\\/maps\\/d\\/u\\/0\\/viewer?mid=1Q5fq0vjBelTrKEPGk01gC1nNnwY\" }"], "credit": "© 2026 Yujie Chen", "photos": [], "alert_source": "City of Toronto cherry blossoms page", "bloom_2026_observations": [{"date": "2026-04-25", "stage": "partial", "source": "High Park Nature Centre"}, {"date": "2026-04-27", "stage": "partial", "source": "High Park Nature Centre"}], "accessibility": ["Some paved paths nearby", "Cherry Hill is sloped and not directly accessible via paved path", "Accessible washrooms during peak bloom", "No vehicle access during peak bloom (Wheel-Trans only allowed)"]}, "geometry": {"type": "MultiPolygon", "coordinates": [[[[-79.46416980738594, 43.64162801970179, 0.0], [-79.46406831720913, 43.64161367340985, 0.0], [-79.46399101967268, 43.64160288364276, 0.0], [-79.46393791477664, 43.64159565040053, 0.0], [-79.46390900252099, 43.64159197368315, 0.0], [-79.46390428290573, 43.64159185349062, 0.0], [-79.46386644188887, 43.64159462532967, 0.0], [-79.46379547947039, 43.64160028920029, 0.0], [-79.4636913956503, 43.64160884510249, 0.0], [-79.46355419042861, 43.64162029303626, 0.0], [-79.46343509483941, 43.641639387777204, 0.0], [-79.46333410888275, 43.64166612932533, 0.0], [-79.46325123255858, 43.64170051768062, 0.0], [-79.46318646586691, 43.641742552843084, 0.0], [-79.4631341764286, 43.641763880264016, 0.0], [-79.46309436424364, 43.64176449994339, 0.0], [-79.46306702931201, 43.64174441188125, 0.0], [-79.46305217163375, 43.64170361607756, 0.0], [-79.46305117018905, 43.64166335258815, 0.0], [-79.46306402497792, 43.64162362141302, 0.0], [-79.46309073600037, 43.641584422552164, 0.0], [-79.46313130325638, 43.64154575600559, 0.0], [-79.46319196027261, 43.64150553767353, 0.0], [-79.46327270704906, 43.64146376755598, 0.0], [-79.4633735435857, 43.64142044565295, 0.0], [-79.46349446988255, 43.641375571964424, 0.0], [-79.46360870616704, 43.64134124586639, 0.0], [-79.46371625243918, 43.64131746735886, 0.0], [-79.46381710869898, 43.64130423644181, 0.0], [-79.46391127494641, 43.64130155311526, 0.0], [-79.4640253185242, 43.64131134139155, 0.0], [-79.46415923943232, 43.641333601270674, 0.0], [-79.46431303767082, 43.64136833275263, 0.0], [-79.46448671323965, 43.64141553583743, 0.0], [-79.4646408926986, 43.641457817143774, 0.0], [-79.46477557604764, 43.641495176671675, 0.0], [-79.46489076328679, 43.64152761442113, 0.0], [-79.46498645441602, 43.641555130392135, 0.0], [-79.46504807365264, 43.64158059519295, 0.0], [-79.46507562099664, 43.64160400882358, 0.0], [-79.465069096448, 43.641625371284015, 0.0], [-79.46502850000675, 43.64164468257427, 0.0], [-79.46495770500745, 43.64165765914383, 0.0], [-79.46485671145012, 43.641664300992716, 0.0], [-79.46472551933473, 43.64166460812092, 0.0], [-79.46456412866132, 43.64165858052842, 0.0], [-79.46441771311204, 43.64165047326107, 0.0], [-79.46428627268692, 43.64164028631886, 0.0], [-79.46416980738594, 43.64162801970179, 0.0]]], [[[-79.45879635945977, 43.64365097219029, 0.0], [-79.45879712919636, 43.643816482630264, 0.0], [-79.45879601083868, 43.64397421383319, 0.0], [-79.45879300438675, 43.644124165799056, 0.0], [-79.45878810984054, 43.64426633852787, 0.0], [-79.45878132720006, 43.64440073201964, 0.0], [-79.45876666532698, 43.64449844668815, 0.0], [-79.45874412422127, 43.6445594825334, 0.0], [-79.45871370388295, 43.6445838395554, 0.0], [-79.45867540431203, 43.64457151775414, 0.0], [-79.45863911214593, 43.644493573522084, 0.0], [-79.45860482738469, 43.64435000685925, 0.0], [-79.45857255002828, 43.6441408177656, 0.0], [-79.45854228007673, 43.64386600624117, 0.0], [-79.45852395652354, 43.6436511234737, 0.0], [-79.45851757936873, 43.643496169463205, 0.0], [-79.45852314861229, 43.64340114420969, 0.0], [-79.45854066425422, 43.64336604771313, 0.0], [-79.45856534437914, 43.643332768322, 0.0], [-79.45859718898708, 43.64330130603628, 0.0], [-79.458636198078, 43.64327166085596, 0.0], [-79.45868237165192, 43.64324383278107, 0.0], [-79.45871972513498, 43.64323550021624, 0.0], [-79.4587482585272, 43.64324666316149, 0.0], [-79.45876797182856, 43.643277321616814, 0.0], [-79.45877886503911, 43.64332747558222, 0.0], [-79.45878722738114, 43.643406468666264, 0.0], [-79.4587930588547, 43.64351430086895, 0.0], [-79.45879635945977, 43.64365097219029, 0.0]]], [[[-79.46281959247236, 43.64508872938421, 0.0], [-79.46286186927404, 43.645121413732824, 0.0], [-79.46287744729243, 43.64514702515139, 0.0], [-79.46286632652752, 43.64516556363988, 0.0], [-79.46282850697929, 43.64517702919833, 0.0], [-79.46276398864775, 43.64518142182672, 0.0], [-79.46271301750247, 43.64518069911078, 0.0], [-79.4626755935434, 43.6451748610505, 0.0], [-79.46265171677058, 43.64516390764588, 0.0], [-79.46264138718398, 43.64514783889692, 0.0], [-79.46264178277315, 43.64513053527819, 0.0], [-79.46265290353806, 43.64511199678969, 0.0], [-79.46267474947874, 43.64509222343141, 0.0], [-79.46270732059517, 43.64507121520336, 0.0], [-79.46274231813291, 43.64506363011947, 0.0], [-79.46277974209198, 43.64506946817976, 0.0], [-79.46281959247236, 43.64508872938421, 0.0]]], [[[-79.46623688426901, 43.642275352378704, 0.0], [-79.46616945832868, 43.64224463038258, 0.0], [-79.46611439051568, 43.64221383981898, 0.0], [-79.46607168083003, 43.64218298068792, 0.0], [-79.46604132927169, 43.64215205298938, 0.0], [-79.46602333584067, 43.642121056723376, 0.0], [-79.46602130445929, 43.64209642645309, 0.0], [-79.46603523512753, 43.642078162178514, 0.0], [-79.46606512784541, 43.64206626389966, 0.0], [-79.46611098261295, 43.64206073161652, 0.0], [-79.4661634243231, 43.642064189712265, 0.0], [-79.46622245297587, 43.6420766381869, 0.0], [-79.46628806857132, 43.64209807704042, 0.0], [-79.46636027110938, 43.64212850627284, 0.0], [-79.46641461650049, 43.64215858303671, 0.0], [-79.46645110474464, 43.642188307332034, 0.0], [-79.4664697358418, 43.64221767915882, 0.0], [-79.466470509792, 43.64224669851705, 0.0], [-79.46646273728354, 43.64227041352438, 0.0], [-79.46644641831642, 43.64228882418082, 0.0], [-79.46642155289062, 43.64230193048634, 0.0], [-79.46638814100616, 43.64230973244096, 0.0], [-79.46634622560774, 43.6423079034079, 0.0], [-79.46629580669536, 43.64229644338714, 0.0], [-79.46623688426901, 43.642275352378704, 0.0]]], [[[-79.46692042699833, 43.6455507401871, 0.0], [-79.46688152117301, 43.645422520111566, 0.0], [-79.46684754507326, 43.645317082756385, 0.0], [-79.46681849869908, 43.645234428121555, 0.0], [-79.46679438205047, 43.64517455620707, 0.0], [-79.46677519512744, 43.645137467012916, 0.0], [-79.4667516508259, 43.645100349387434, 0.0], [-79.46672374914587, 43.64506320333062, 0.0], [-79.46669149008736, 43.64502602884247, 0.0], [-79.46665487365038, 43.64498882592297, 0.0], [-79.46662619886483, 43.64495999946081, 0.0], [-79.46660546573071, 43.644939549455984, 0.0], [-79.46659267424803, 43.64492747590848, 0.0], [-79.4665878244168, 43.644923778818324, 0.0], [-79.466583002825, 43.64491916532903, 0.0], [-79.46657820947264, 43.644913635440616, 0.0], [-79.46657344435971, 43.64490718915309, 0.0], [-79.46656870748622, 43.64489982646643, 0.0], [-79.46656336672736, 43.64489200149629, 0.0], [-79.46655742208314, 43.644883714242674, 0.0], [-79.46655087355357, 43.644874964705565, 0.0], [-79.46654372113863, 43.64486575288497, 0.0], [-79.4665365233372, 43.64485744709102, 0.0], [-79.46652928014927, 43.64485004732371, 0.0], [-79.46652199157482, 43.64484355358304, 0.0], [-79.46651465761389, 43.64483796586901, 0.0], [-79.46650656457817, 43.64483416019682, 0.0], [-79.4664977124677, 43.64483213656647, 0.0], [-79.46648810128244, 43.64483189497797, 0.0], [-79.46647773102242, 43.64483343543131, 0.0], [-79.46646673562518, 43.64483449822281, 0.0], [-79.46645511509072, 43.644835083352476, 0.0], [-79.46644286941905, 43.644835190820295, 0.0], [-79.46642999861015, 43.644834820626265, 0.0], [-79.46641841866823, 43.64483448757633, 0.0], [-79.46640812959326, 43.64483419167048, 0.0], [-79.46639913138526, 43.64483393290871, 0.0], [-79.46639142404422, 43.64483371129103, 0.0], [-79.4663831257665, 43.644832103268946, 0.0], [-79.46637423655207, 43.64482910884246, 0.0], [-79.46636475640098, 43.64482472801158, 0.0], [-79.46635468531322, 43.64481896077629, 0.0], [-79.4663459172191, 43.644812778503145, 0.0], [-79.46633845211863, 43.64480618119212, 0.0], [-79.46633229001183, 43.644799168843235, 0.0], [-79.46632743089869, 43.64479174145648, 0.0], [-79.46632476241831, 43.64477616861993, 0.0], [-79.46632428457067, 43.64475245033358, 0.0], [-79.46632599735582, 43.64472058659744, 0.0], [-79.46632990077376, 43.6446805774115, 0.0], [-79.46634410838175, 43.64463851380046, 0.0], [-79.4663686201798, 43.644594395764315, 0.0], [-79.46640343616794, 43.64454822330307, 0.0], [-79.46644855634617, 43.644499996416734, 0.0], [-79.46649060349493, 43.64445074257781, 0.0], [-79.46652957761427, 43.644400461786304, 0.0], [-79.46656547870414, 43.64434915404223, 0.0], [-79.46659830676457, 43.64429681934557, 0.0], [-79.46663846271505, 43.64424761710484, 0.0], [-79.4666859465556, 43.64420154732004, 0.0], [-79.4667407582862, 43.644158609991145, 0.0], [-79.46680289790687, 43.644118805118175, 0.0], [-79.4668502478234, 43.644087563994795, 0.0], [-79.46688280803579, 43.64406488662101, 0.0], [-79.46690057854403, 43.64405077299681, 0.0], [-79.46690355934813, 43.6440452231222, 0.0], [-79.46692311393565, 43.644029315256134, 0.0], [-79.4669592423066, 43.644003049398606, 0.0], [-79.467011944461, 43.643966425549614, 0.0], [-79.46708122039882, 43.64391944370915, 0.0], [-79.46712648595863, 43.64386761820457, 0.0], [-79.4671477411404, 43.643810949035846, 0.0], [-79.46714498594412, 43.64374943620298, 0.0], [-79.46711822036981, 43.64368307970599, 0.0], [-79.46709699321585, 43.64361406498173, 0.0], [-79.46708130448222, 43.64354239203021, 0.0], [-79.46707115416892, 43.64346806085143, 0.0], [-79.46706654227596, 43.64339107144539, 0.0], [-79.46707161238506, 43.64331520749542, 0.0], [-79.4670863644962, 43.6432404690015, 0.0], [-79.46711079860941, 43.643166855963656, 0.0], [-79.46714491472467, 43.64309436838187, 0.0], [-79.46718606565108, 43.643027644627956, 0.0], [-79.46723425138865, 43.64296668470192, 0.0], [-79.46728947193736, 43.64291148860375, 0.0], [-79.4673517272972, 43.64286205633345, 0.0], [-79.46740143197815, 43.6428326326255, 0.0], [-79.46743858598018, 43.64282321747989, 0.0], [-79.46746318930329, 43.642833810896626, 0.0], [-79.46747524194745, 43.642864412875724, 0.0], [-79.4674884004747, 43.642938639587044, 0.0], [-79.46750266488502, 43.6430564910306, 0.0], [-79.46751803517837, 43.6432179672064, 0.0], [-79.46753451135477, 43.64342306811444, 0.0], [-79.4675423547809, 43.643596652128466, 0.0], [-79.46754156545673, 43.64373871924848, 0.0], [-79.46753214338227, 43.643849269474494, 0.0], [-79.4675140885575, 43.6439283028065, 0.0], [-79.46750796548086, 43.6440043963901, 0.0], [-79.46751377415234, 43.64407755022529, 0.0], [-79.46753151457193, 43.64414776431208, 0.0], [-79.46756118673966, 43.64421503865048, 0.0], [-79.46758638887675, 43.64428263766246, 0.0], [-79.46760712098319, 43.644350561348034, 0.0], [-79.467623383059, 43.644418809707204, 0.0], [-79.46763517510418, 43.64448738273997, 0.0], [-79.46763789936625, 43.6445742052284, 0.0], [-79.46763155584523, 43.6446792771725, 0.0], [-79.46761614454111, 43.64480259857227, 0.0], [-79.46759166545388, 43.6449441694277, 0.0], [-79.46756913754551, 43.645079421112854, 0.0], [-79.46754856081598, 43.64520835362772, 0.0], [-79.4675299352653, 43.64533096697231, 0.0], [-79.4675132608935, 43.64544726114662, 0.0], [-79.46748858065882, 43.64555534158943, 0.0], [-79.46745589456133, 43.645655208300724, 0.0], [-79.46741520260096, 43.64574686128053, 0.0], [-79.46736650477777, 43.64583030052883, 0.0], [-79.46733958769646, 43.645921653939205, 0.0], [-79.46733445135703, 43.64602092151166, 0.0], [-79.4673510957595, 43.6461281032462, 0.0], [-79.46738952090386, 43.64624319914281, 0.0], [-79.46741300536587, 43.64633815170015, 0.0], [-79.46742154914551, 43.64641296091822, 0.0], [-79.46741515224284, 43.64646762679701, 0.0], [-79.4673938146578, 43.64650214933652, 0.0], [-79.46736470212679, 43.64651141799529, 0.0], [-79.46732781464982, 43.64649543277332, 0.0], [-79.46728315222686, 43.64645419367059, 0.0], [-79.46723071485793, 43.64638770068713, 0.0], [-79.46718052530304, 43.646305661629405, 0.0], [-79.46713258356216, 43.64620807649743, 0.0], [-79.46708688963534, 43.64609494529121, 0.0], [-79.46704344352253, 43.645966268010746, 0.0], [-79.46701089089936, 43.645867873688545, 0.0], [-79.46698923176584, 43.645799762324586, 0.0], [-79.46697846612193, 43.64576193391891, 0.0], [-79.46697859396768, 43.6457543884715, 0.0], [-79.46696896339566, 43.64571667436706, 0.0], [-79.46694957440587, 43.645648791605595, 0.0], [-79.46692042699833, 43.6455507401871, 0.0]]], [[[-79.46777081138103, 43.6488735225398, 0.0], [-79.46774167216618, 43.64867310052422, 0.0], [-79.46773226714234, 43.64850555946764, 0.0], [-79.4677425963095, 43.648370899370036, 0.0], [-79.46777265966765, 43.6482691202314, 0.0], [-79.4678224572168, 43.648200222051734, 0.0], [-79.46786288420337, 43.648161912890515, 0.0], [-79.46789394062736, 43.64815419274775, 0.0], [-79.46791562648879, 43.64817706162342, 0.0], [-79.46792794178764, 43.64823051951753, 0.0], [-79.46794248220942, 43.648317332572425, 0.0], [-79.46795924775415, 43.6484375007881, 0.0], [-79.46797823842184, 43.64859102416454, 0.0], [-79.46799945421246, 43.648777902701745, 0.0], [-79.46801666330128, 43.6489540333163, 0.0], [-79.46802986568831, 43.6491194160082, 0.0], [-79.46803906137352, 43.64927405077742, 0.0], [-79.46804425035693, 43.649417937623994, 0.0], [-79.46804760480777, 43.649540399881275, 0.0], [-79.46804912472601, 43.64964143754928, 0.0], [-79.4680488101117, 43.649721050628, 0.0], [-79.46804666096483, 43.64977923911742, 0.0], [-79.468035816241, 43.64983954908756, 0.0], [-79.46801627594022, 43.64990198053842, 0.0], [-79.4679880400625, 43.64996653346995, 0.0], [-79.46795110860785, 43.65003320788219, 0.0], [-79.46790725570078, 43.65008977328337, 0.0], [-79.4678564813413, 43.65013622967349, 0.0], [-79.46779878552942, 43.650172577052544, 0.0], [-79.46773416826514, 43.65019881542054, 0.0], [-79.4676667089901, 43.65022230069596, 0.0], [-79.46759640770429, 43.650243032878805, 0.0], [-79.46752326440773, 43.650261011969086, 0.0], [-79.46744727910038, 43.650276237966786, 0.0], [-79.46740728434023, 43.650269652745706, 0.0], [-79.46740328012723, 43.65024125630583, 0.0], [-79.4674352664614, 43.650191048647166, 0.0], [-79.46750324334269, 43.6501190297697, 0.0], [-79.46756616693287, 43.65004749402476, 0.0], [-79.46762403723193, 43.64997644141235, 0.0], [-79.46767685423984, 43.64990587193245, 0.0], [-79.4677246179566, 43.649835785585054, 0.0], [-79.46776158178616, 43.64974843954322, 0.0], [-79.46778774572849, 43.649643833806905, 0.0], [-79.46780310978359, 43.649521968376156, 0.0], [-79.46780767395147, 43.64938284325095, 0.0], [-79.46780381227367, 43.64922839390316, 0.0], [-79.46779152475018, 43.649058620332774, 0.0], [-79.46777081138103, 43.6488735225398, 0.0]]]]}}, {"type": "Feature", "properties": {"fid": 17, "Name": "Edwards Gardens", "address": "755 Lawrence Ave. E.,  North York", "on_official_list": true, "alert": null, "description": "Near fountain courtyard and west ravine entrance near bridal path.", "trees": "", "verification": "City of Toronto's description gives a general area only. I inferred the specific polygon from on-the-ground YouTube footage.", "reliability": "medium", "bloom_2026": "blooming", "bloom_2026_note": "Bloom observed Apr 23, 2026.", "bloom_offset_days": 0, "references": ["{ \"title\": \"City of Toronto — Cherry Blossoms\", \"url\": \"https:\\/\\/www.toronto.ca\\/explore-enjoy\\/festivals-events\\/cherry-blossoms\\/\" }", "{ \"title\": \"Edwards Gardens cherry blossoms (YouTube)\", \"url\": \"https:\\/\\/www.youtube.com\\/watch?v=Ughf0CSP5q8\" }"], "credit": "© 2026 Yujie Chen", "photos": [], "alert_source": null, "bloom_2026_observations": [{"date": "2026-04-23", "stage": "bloom", "source": "Instagram"}, {"date": "2026-04-26", "stage": "bloom", "source": "Instagram"}], "accessibility": ["Paved pathways", "Parking at Toronto Botanical Gardens (Leslie St)", "TTC service on Lawrence Ave E and Leslie St"]}, "geometry": {"type": "MultiPolygon", "coordinates": [[[[-79.35887964308479, 43.733716254560804, 0.0], [-79.35885098673933, 43.73374017553314, 0.0], [-79.3588252040685, 43.73375233620422, 0.0], [-79.35880229507231, 43.73375273657403, 0.0], [-79.35878225975077, 43.733741376642605, 0.0], [-79.35876509810387, 43.73371825640992, 0.0], [-79.35875687784886, 43.73369704390444, 0.0], [-79.35875759898572, 43.73367773912617, 0.0], [-79.35876726151446, 43.733660342075105, 0.0], [-79.3587858654351, 43.73364485275123, 0.0], [-79.35881151465455, 43.73362742360236, 0.0], [-79.35884420917286, 43.733608054628476, 0.0], [-79.35888394899001, 43.73358674582957, 0.0], [-79.358930734106, 43.73356349720565, 0.0], [-79.35897312183606, 43.733551726778714, 0.0], [-79.35901111218017, 43.733551434548744, 0.0], [-79.35904470513834, 43.733562620515755, 0.0], [-79.35907390071058, 43.73358528467975, 0.0], [-79.35908360573563, 43.73360610106377, 0.0], [-79.35907382021352, 43.73362506966783, 0.0], [-79.35904454414421, 43.733642190491935, 0.0], [-79.35899577752772, 43.73365746353609, 0.0], [-79.35895203847899, 43.733674898562285, 0.0], [-79.35891332699802, 43.73369449557052, 0.0], [-79.35887964308479, 43.733716254560804, 0.0]]], [[[-79.36024424409608, 43.7340833263648, 0.0], [-79.36025894745983, 43.73409620395222, 0.0], [-79.36026999557718, 43.73410595062309, 0.0], [-79.36027738844815, 43.73411256637738, 0.0], [-79.36028112607273, 43.73411605121511, 0.0], [-79.36028120845094, 43.73411640513628, 0.0], [-79.36028414843688, 43.734122066848656, 0.0], [-79.36028994603052, 43.734133036352276, 0.0], [-79.36029860123189, 43.7341493136471, 0.0], [-79.36031011404098, 43.734170898733154, 0.0], [-79.36031947273291, 43.734189131820145, 0.0], [-79.36032667730767, 43.73420401290807, 0.0], [-79.36033172776526, 43.73421554199693, 0.0], [-79.36033462410569, 43.73422371908673, 0.0], [-79.36033574067565, 43.73423144563798, 0.0], [-79.36033507747514, 43.734238721650684, 0.0], [-79.36033263450419, 43.73424554712483, 0.0], [-79.36032841176277, 43.73425192206043, 0.0], [-79.3603148326987, 43.73425779685057, 0.0], [-79.360291897312, 43.73426317149527, 0.0], [-79.36025960560265, 43.7342680459945, 0.0], [-79.36021795757065, 43.73427242034825, 0.0], [-79.36017647976797, 43.734270630767384, 0.0], [-79.36013517219462, 43.73426267725188, 0.0], [-79.36009403485056, 43.73424855980174, 0.0], [-79.3600530677358, 43.73422827841698, 0.0], [-79.36002584476037, 43.73420125059336, 0.0], [-79.3600123659242, 43.7341674763309, 0.0], [-79.36001263122736, 43.734126955629606, 0.0], [-79.36002664066982, 43.734079688489444, 0.0], [-79.36004805614022, 43.734047689522114, 0.0], [-79.36007687763856, 43.7340309587276, 0.0], [-79.36011310516486, 43.73402949610589, 0.0], [-79.3601567387191, 43.73404330165699, 0.0], [-79.36019313972571, 43.73405687521718, 0.0], [-79.36022230818472, 43.73407021678645, 0.0], [-79.36024424409608, 43.7340833263648, 0.0]]]]}}, {"type": "Feature", "properties": {"fid": 18, "Name": "Ramsden Park", "address": "Yonge St. & Pears Ave., Toronto", "on_official_list": false, "alert": null, "description": "Limited confirmed locations (approximate area only).", "trees": "", "verification": "Not listed on City of Toronto's cherry blossom page. Presence is documented through Google images and online video; the precise tree location is uncertain.", "reliability": "medium", "bloom_2026": "unknown", "bloom_2026_note": "Bloom not confirmed for 2026.", "bloom_offset_days": 0, "references": [], "credit": "© 2026 Yujie Chen", "photos": [], "alert_source": null, "accessibility": []}, "geometry": {"type": "MultiPolygon", "coordinates": [[[[-79.39340310747846, 43.67689707944756, 0.0], [-79.39344823042964, 43.67685195649637, 0.0], [-79.39348187814755, 43.67680236014915, 0.0], [-79.3935040506322, 43.67674829040591, 0.0], [-79.39351474788356, 43.67668974726665, 0.0], [-79.39351396990163, 43.67662673073136, 0.0], [-79.3935133864152, 43.676561185754835, 0.0], [-79.39351299742424, 43.6764931123371, 0.0], [-79.39351280292875, 43.67642251047811, 0.0], [-79.39351280292875, 43.676349380177896, 0.0], [-79.39346145612222, 43.676301728785475, 0.0], [-79.39335876250917, 43.676279556300834, 0.0], [-79.39320472208958, 43.67628286272399, 0.0], [-79.39299933486346, 43.67631164805492, 0.0], [-79.39282001003157, 43.676337904944624, 0.0], [-79.39266674759389, 43.6763616333931, 0.0], [-79.39253954755044, 43.67638283340034, 0.0], [-79.39243840990122, 43.67640150496636, 0.0], [-79.39232988142378, 43.67642231598264, 0.0], [-79.39221396211812, 43.67644526644919, 0.0], [-79.39209065198426, 43.67647035636602, 0.0], [-79.39195995102216, 43.67649758573312, 0.0], [-79.39188001338017, 43.676537651801844, 0.0], [-79.39185083905828, 43.67659055457221, 0.0], [-79.39187242805647, 43.67665629404421, 0.0], [-79.39194478037479, 43.676734870217835, 0.0], [-79.39203347031334, 43.6767943858345, 0.0], [-79.39213849787214, 43.67683484089419, 0.0], [-79.39225986305121, 43.67685623539691, 0.0], [-79.39239756585056, 43.67685856934266, 0.0], [-79.3925465493877, 43.676866738152796, 0.0], [-79.39270681366264, 43.67688074182731, 0.0], [-79.39287835867536, 43.676900580366194, 0.0], [-79.39306118442587, 43.676926253769466, 0.0], [-79.39320958447657, 43.676934228084114, 0.0], [-79.39332355882743, 43.67692450331015, 0.0], [-79.39340310747846, 43.67689707944756, 0.0]]]]}}, {"type": "Feature", "properties": {"fid": 19, "Name": "Toronto Music Garden", "address": "479 Queens Quay W.,  Toronto", "on_official_list": false, "alert": null, "description": "Above the staircase area in the garden.", "trees": "", "verification": "Not listed on City of Toronto's cherry blossom page. The trees are easily identified from Google Maps photos along the waterfront.", "reliability": "high", "bloom_2026": "unknown", "bloom_2026_note": "Bloom not confirmed for 2026.", "bloom_offset_days": 0, "references": [], "credit": "© 2026 Yujie Chen", "photos": [], "alert_source": null, "accessibility": []}, "geometry": {"type": "MultiPolygon", "coordinates": [[[[-79.39398484345699, 43.637142981464116, 0.0], [-79.39396344895428, 43.63714920531945, 0.0], [-79.39394040123997, 43.63714949706267, 0.0], [-79.39391570031411, 43.637143856693775, 0.0], [-79.39388934617666, 43.63713228421276, 0.0], [-79.39386133882763, 43.637114779619615, 0.0], [-79.39383556817663, 43.63709533007169, 0.0], [-79.39381203422364, 43.63707393556897, 0.0], [-79.39379073696865, 43.63705059611146, 0.0], [-79.39377167641169, 43.63702531169915, 0.0], [-79.3937638965925, 43.637001680498415, 0.0], [-79.39376739751114, 43.63697970250926, 0.0], [-79.39378217916757, 43.63695937773167, 0.0], [-79.3938082415618, 43.63694070616566, 0.0], [-79.39383002505548, 43.636928744693684, 0.0], [-79.39384752964861, 43.63692349331574, 0.0], [-79.3938607553412, 43.63692495203183, 0.0], [-79.39386970213326, 43.63693312084197, 0.0], [-79.39388049663236, 43.6369449850662, 0.0], [-79.39389313883851, 43.63696054470454, 0.0], [-79.39390762875172, 43.63697979975699, 0.0], [-79.39392396637197, 43.637002750223544, 0.0], [-79.39394351316764, 43.637024630964966, 0.0], [-79.3939662691387, 43.63704544198125, 0.0], [-79.3939922342852, 43.6370651832724, 0.0], [-79.39402140860709, 43.637083854838416, 0.0], [-79.39404027466858, 43.63709921998128, 0.0], [-79.39404883246966, 43.63711127870099, 0.0], [-79.39404708201036, 43.637120030997565, 0.0], [-79.39403502329064, 43.63712547687098, 0.0], [-79.39402063062518, 43.637131117239875, 0.0], [-79.39400390401396, 43.63713695210426, 0.0], [-79.39398484345699, 43.637142981464116, 0.0]]]]}}, {"type": "Feature", "properties": {"fid": 20, "Name": "Front Campus, University of Toronto", "address": "King's College Cir.,  Toronto", "on_official_list": false, "alert": null, "description": "Across Front Campus grounds.", "trees": "", "verification": "Not listed on City of Toronto's cherry blossom page. The polygon is an approximate 3 m ring along the Front Campus oval perimeter, drawn from a user-provided centre point and radius.", "reliability": "high", "bloom_2026": "blooming", "bloom_2026_note": "Bloom observed Apr 21, 2026,  some buds remained.", "bloom_offset_days": -1, "references": [], "credit": "© 2026 Yujie Chen", "photos": [], "alert_source": null, "bloom_2026_observations": [{"date": "2026-04-21", "stage": "partial", "source": "Instagram"}], "accessibility": []}, "geometry": {"type": "MultiPolygon", "coordinates": [[[[-79.39423120654149, 43.6617626, 0.0], [-79.3942323133889, 43.66179521789894, 0.0], [-79.39423563126465, 43.6618277572185, 0.0], [-79.39424115217568, 43.66186013956861, 0.0], [-79.39424886282163, 43.66189228693736, 0.0], [-79.39425874462688, 43.66192412187892, 0.0], [-79.39427077378531, 43.66195556770012, 0.0], [-79.3942849213176, 43.66198654864523, 0.0], [-79.39430115314111, 43.66201699007844, 0.0], [-79.39431943015198, 43.662046818663676, 0.0], [-79.39433970831927, 43.66207596254125, 0.0], [-79.39436193879109, 43.662104351501014, 0.0], [-79.3943860680123, 43.66213191715148, 0.0], [-79.3944120378535, 43.66215859308458, 0.0], [-79.39443978575105, 43.66218431503565, 0.0], [-79.39446924485783, 43.662209021038265, 0.0], [-79.39450034420429, 43.6622326515735, 0.0], [-79.39453300886939, 43.66225514971332, 0.0], [-79.39456716016106, 43.66227646125773, 0.0], [-79.39460271580586, 43.66229653486537, 0.0], [-79.39463959014714, 43.66231532217715, 0.0], [-79.39467769435136, 43.6623327779328, 0.0], [-79.39471693662216, 43.66234886007986, 0.0], [-79.39475722242149, 43.66236352987504, 0.0], [-79.39479845469731, 43.66237675197751, 0.0], [-79.39484053411748, 43.66238849453408, 0.0], [-79.39488335930896, 43.66239872925589, 0.0], [-79.39492682710214, 43.662407431486606, 0.0], [-79.39497083277928, 43.662414580261796, 0.0], [-79.39501527032685, 43.662420158359424, 0.0], [-79.39506003269092, 43.662424152341366, 0.0], [-79.39510501203503, 43.66242655258578, 0.0], [-79.3951501, 43.66242735331025, 0.0], [-79.39519518796496, 43.66242655258578, 0.0], [-79.39524016730907, 43.662424152341366, 0.0], [-79.39528492967314, 43.662420158359424, 0.0], [-79.39532936722071, 43.662414580261796, 0.0], [-79.39537337289785, 43.662407431486606, 0.0], [-79.39541684069103, 43.66239872925589, 0.0], [-79.39545966588251, 43.66238849453408, 0.0], [-79.39550174530268, 43.66237675197751, 0.0], [-79.3955429775785, 43.66236352987504, 0.0], [-79.39558326337783, 43.66234886007986, 0.0], [-79.39562250564863, 43.6623327779328, 0.0], [-79.39566060985285, 43.66231532217715, 0.0], [-79.39569748419413, 43.66229653486537, 0.0], [-79.39573303983893, 43.66227646125773, 0.0], [-79.3957671911306, 43.66225514971332, 0.0], [-79.3957998557957, 43.6622326515735, 0.0], [-79.39583095514216, 43.662209021038265, 0.0], [-79.39586041424894, 43.66218431503565, 0.0], [-79.39588816214649, 43.66215859308458, 0.0], [-79.3959141319877, 43.66213191715148, 0.0], [-79.3959382612089, 43.662104351501014, 0.0], [-79.39596049168073, 43.66207596254125, 0.0], [-79.39598076984801, 43.662046818663676, 0.0], [-79.39599904685888, 43.66201699007844, 0.0], [-79.39601527868238, 43.66198654864523, 0.0], [-79.39602942621468, 43.66195556770012, 0.0], [-79.39604145537311, 43.66192412187892, 0.0], [-79.39605133717836, 43.66189228693736, 0.0], [-79.39605904782431, 43.66186013956861, 0.0], [-79.39606456873534, 43.6618277572185, 0.0], [-79.39606788661109, 43.66179521789894, 0.0], [-79.3960689934585, 43.6617626, 0.0], [-79.39606788661109, 43.661729982101065, 0.0], [-79.39606456873534, 43.66169744278151, 0.0], [-79.39605904782431, 43.661665060431396, 0.0], [-79.39605133717836, 43.66163291306265, 0.0], [-79.39604145537311, 43.66160107812109, 0.0], [-79.39602942621468, 43.66156963229989, 0.0], [-79.39601527868238, 43.661538651354775, 0.0], [-79.39599904685888, 43.661508209921564, 0.0], [-79.39598076984801, 43.66147838133633, 0.0], [-79.39596049168073, 43.661449237458754, 0.0], [-79.3959382612089, 43.66142084849899, 0.0], [-79.3959141319877, 43.66139328284853, 0.0], [-79.39588816214649, 43.66136660691543, 0.0], [-79.39586041424894, 43.66134088496435, 0.0], [-79.39583095514216, 43.66131617896174, 0.0], [-79.3957998557957, 43.66129254842651, 0.0], [-79.3957671911306, 43.66127005028669, 0.0], [-79.39573303983893, 43.66124873874227, 0.0], [-79.39569748419413, 43.66122866513464, 0.0], [-79.39566060985285, 43.661209877822856, 0.0], [-79.39562250564863, 43.66119242206721, 0.0], [-79.39558326337783, 43.66117633992015, 0.0], [-79.3955429775785, 43.66116167012497, 0.0], [-79.39550174530268, 43.661148448022495, 0.0], [-79.39545966588251, 43.66113670546593, 0.0], [-79.39541684069103, 43.661126470744115, 0.0], [-79.39537337289785, 43.6611177685134, 0.0], [-79.39532936722071, 43.66111061973821, 0.0], [-79.39528492967314, 43.66110504164058, 0.0], [-79.39524016730907, 43.66110104765864, 0.0], [-79.39519518796496, 43.66109864741423, 0.0], [-79.3951501, 43.661097846689756, 0.0], [-79.39510501203503, 43.66109864741423, 0.0], [-79.39506003269092, 43.66110104765864, 0.0], [-79.39501527032685, 43.66110504164058, 0.0], [-79.39497083277928, 43.66111061973821, 0.0], [-79.39492682710214, 43.6611177685134, 0.0], [-79.39488335930896, 43.661126470744115, 0.0], [-79.39484053411748, 43.66113670546593, 0.0], [-79.39479845469731, 43.661148448022495, 0.0], [-79.39475722242149, 43.66116167012497, 0.0], [-79.39471693662216, 43.66117633992015, 0.0], [-79.39467769435136, 43.66119242206721, 0.0], [-79.39463959014714, 43.661209877822856, 0.0], [-79.39460271580586, 43.66122866513464, 0.0], [-79.39456716016106, 43.66124873874227, 0.0], [-79.39453300886939, 43.66127005028669, 0.0], [-79.39450034420429, 43.66129254842651, 0.0], [-79.39446924485783, 43.66131617896174, 0.0], [-79.39443978575105, 43.66134088496435, 0.0], [-79.3944120378535, 43.66136660691543, 0.0], [-79.3943860680123, 43.66139328284853, 0.0], [-79.39436193879109, 43.66142084849899, 0.0], [-79.39433970831927, 43.661449237458754, 0.0], [-79.39431943015198, 43.66147838133633, 0.0], [-79.39430115314111, 43.661508209921564, 0.0], [-79.3942849213176, 43.661538651354775, 0.0], [-79.39427077378531, 43.66156963229989, 0.0], [-79.39425874462688, 43.66160107812109, 0.0], [-79.39424886282163, 43.66163291306265, 0.0], [-79.39424115217568, 43.661665060431396, 0.0], [-79.39423563126465, 43.66169744278151, 0.0], [-79.3942323133889, 43.661729982101065, 0.0], [-79.39423120654149, 43.6617626, 0.0]], [[-79.394268458979, 43.6617626, 0.0], [-79.39426952095421, 43.661731304448324, 0.0], [-79.39427270432148, 43.661700084290366, 0.0], [-79.3942780014118, 43.66166901473823, 0.0], [-79.394285399464, 43.66163817064119, 0.0], [-79.39429488065552, 43.66160762630537, 0.0], [-79.39430642214536, 43.661577455314756, 0.0], [-79.39431999612904, 43.6615477303539, 0.0], [-79.39433556990566, 43.661518523032846, 0.0], [-79.39435310595663, 43.66148990371459, 0.0], [-79.39437256203605, 43.661461941345564, 0.0], [-79.39439389127253, 43.66143470328957, 0.0], [-79.39441704228207, 43.661408255165476, 0.0], [-79.39444195929187, 43.66138266068913, 0.0], [-79.39446858227464, 43.661357981519856, 0.0], [-79.39449684709332, 43.66133427711194, 0.0], [-79.39452668565548, 43.66131160457138, 0.0], [-79.39455802607738, 43.661290018518315, 0.0], [-79.39459079285723, 43.661269570955426, 0.0], [-79.39462490705698, 43.66125031114269, 0.0], [-79.39466028649252, 43.66123228547868, 0.0], [-79.3946968459317, 43.66121553738881, 0.0], [-79.39473449729964, 43.66120010722069, 0.0], [-79.3947731498909, 43.66118603214693, 0.0], [-79.39481271058797, 43.661173346075635, 0.0], [-79.39485308408568, 43.66116207956866, 0.0], [-79.39489417312076, 43.661152259768, 0.0], [-79.39493587870611, 43.66114391033042, 0.0], [-79.3949781003693, 43.661137051370446, 0.0], [-79.39502073639468, 43.66113169941191, 0.0], [-79.39506368406832, 43.661127867348156, 0.0], [-79.3951068399255, 43.66112556441095, 0.0], [-79.3951501, 43.66112479614828, 0.0], [-79.39519336007449, 43.66112556441095, 0.0], [-79.39523651593167, 43.661127867348156, 0.0], [-79.3952794636053, 43.66113169941191, 0.0], [-79.39532209963069, 43.661137051370446, 0.0], [-79.39536432129388, 43.66114391033042, 0.0], [-79.39540602687923, 43.661152259768, 0.0], [-79.39544711591431, 43.66116207956866, 0.0], [-79.39548748941202, 43.661173346075635, 0.0], [-79.3955270501091, 43.66118603214693, 0.0], [-79.39556570270035, 43.66120010722069, 0.0], [-79.39560335406829, 43.66121553738881, 0.0], [-79.39563991350747, 43.66123228547868, 0.0], [-79.39567529294301, 43.66125031114269, 0.0], [-79.39570940714276, 43.661269570955426, 0.0], [-79.39574217392261, 43.661290018518315, 0.0], [-79.39577351434451, 43.66131160457138, 0.0], [-79.39580335290667, 43.66133427711194, 0.0], [-79.39583161772535, 43.661357981519856, 0.0], [-79.39585824070812, 43.66138266068913, 0.0], [-79.39588315771792, 43.661408255165476, 0.0], [-79.39590630872746, 43.66143470328957, 0.0], [-79.39592763796394, 43.661461941345564, 0.0], [-79.39594709404336, 43.66148990371459, 0.0], [-79.39596463009433, 43.661518523032846, 0.0], [-79.39598020387095, 43.6615477303539, 0.0], [-79.39599377785463, 43.661577455314756, 0.0], [-79.39600531934447, 43.66160762630537, 0.0], [-79.396014800536, 43.66163817064119, 0.0], [-79.39602219858818, 43.66166901473823, 0.0], [-79.39602749567851, 43.661700084290366, 0.0], [-79.39603067904578, 43.661731304448324, 0.0], [-79.39603174102099, 43.6617626, 0.0], [-79.39603067904578, 43.66179389555168, 0.0], [-79.39602749567851, 43.66182511570964, 0.0], [-79.39602219858818, 43.661856185261776, 0.0], [-79.396014800536, 43.661887029358816, 0.0], [-79.39600531934447, 43.66191757369464, 0.0], [-79.39599377785463, 43.66194774468525, 0.0], [-79.39598020387095, 43.661977469646104, 0.0], [-79.39596463009433, 43.66200667696716, 0.0], [-79.39594709404336, 43.66203529628542, 0.0], [-79.39592763796394, 43.66206325865444, 0.0], [-79.39590630872746, 43.662090496710434, 0.0], [-79.39588315771792, 43.66211694483453, 0.0], [-79.39585824070812, 43.66214253931088, 0.0], [-79.39583161772535, 43.66216721848015, 0.0], [-79.39580335290667, 43.662190922888065, 0.0], [-79.39577351434451, 43.662213595428625, 0.0], [-79.39574217392261, 43.66223518148169, 0.0], [-79.39570940714276, 43.66225562904458, 0.0], [-79.39567529294301, 43.66227488885732, 0.0], [-79.39563991350747, 43.66229291452132, 0.0], [-79.39560335406829, 43.66230966261119, 0.0], [-79.39556570270035, 43.66232509277932, 0.0], [-79.3955270501091, 43.66233916785308, 0.0], [-79.39548748941202, 43.66235185392437, 0.0], [-79.39544711591431, 43.662363120431344, 0.0], [-79.39540602687923, 43.662372940232004, 0.0], [-79.39536432129388, 43.66238128966958, 0.0], [-79.39532209963069, 43.66238814862956, 0.0], [-79.3952794636053, 43.662393500588095, 0.0], [-79.39523651593167, 43.66239733265185, 0.0], [-79.39519336007449, 43.662399635589054, 0.0], [-79.3951501, 43.66240040385173, 0.0], [-79.3951068399255, 43.662399635589054, 0.0], [-79.39506368406832, 43.66239733265185, 0.0], [-79.39502073639468, 43.662393500588095, 0.0], [-79.3949781003693, 43.66238814862956, 0.0], [-79.39493587870611, 43.66238128966958, 0.0], [-79.39489417312076, 43.662372940232004, 0.0], [-79.39485308408568, 43.662363120431344, 0.0], [-79.39481271058797, 43.66235185392437, 0.0], [-79.3947731498909, 43.66233916785308, 0.0], [-79.39473449729964, 43.66232509277932, 0.0], [-79.3946968459317, 43.66230966261119, 0.0], [-79.39466028649252, 43.66229291452132, 0.0], [-79.39462490705698, 43.66227488885732, 0.0], [-79.39459079285723, 43.66225562904458, 0.0], [-79.39455802607738, 43.66223518148169, 0.0], [-79.39452668565548, 43.662213595428625, 0.0], [-79.39449684709332, 43.662190922888065, 0.0], [-79.39446858227464, 43.66216721848015, 0.0], [-79.39444195929187, 43.66214253931088, 0.0], [-79.39441704228207, 43.66211694483453, 0.0], [-79.39439389127253, 43.662090496710434, 0.0], [-79.39437256203605, 43.66206325865444, 0.0], [-79.39435310595663, 43.66203529628542, 0.0], [-79.39433556990566, 43.66200667696716, 0.0], [-79.39431999612904, 43.661977469646104, 0.0], [-79.39430642214536, 43.66194774468525, 0.0], [-79.39429488065552, 43.66191757369464, 0.0], [-79.394285399464, 43.661887029358816, 0.0], [-79.3942780014118, 43.661856185261776, 0.0], [-79.39427270432148, 43.66182511570964, 0.0], [-79.39426952095421, 43.66179389555168, 0.0], [-79.394268458979, 43.6617626, 0.0]]]]}}]};
+  // Shared state declared upfront so anything defined later can close over it
+  let userLatLng = null;
+
+  // ---------- Map ----------
+  const map = L.map('map', { zoomControl: false, attributionControl: true });
+
+  // Two basemaps; toggle via layers button
+  const cartoLight = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap, &copy; CARTO',
+    subdomains: 'abcd', maxZoom: 20,
+  });
+  map.createPane('labels');
+  map.getPane('labels').style.zIndex = 650;
+  map.getPane('labels').style.pointerEvents = 'none';
+  const cartoLabels = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', {
+    subdomains: 'abcd', maxZoom: 20, pane: 'labels',
+  });
+  const esriSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Imagery &copy; Esri, Maxar, Earthstar Geographics, USDA, USGS, AeroGRID, IGN, and the GIS User Community',
+    maxZoom: 19,
+  });
+  cartoLight.addTo(map); cartoLabels.addTo(map);
+
+  let satelliteOn = false;
+  document.getElementById('btn-layers').addEventListener('click', () => {
+    if (satelliteOn) {
+      map.removeLayer(esriSat); map.addLayer(cartoLight); cartoLabels.addTo(map);
+      document.getElementById('btn-layers').classList.remove('active');
+    } else {
+      map.removeLayer(cartoLight); map.removeLayer(cartoLabels); map.addLayer(esriSat);
+      cartoLabels.addTo(map); // labels stay on top of satellite too
+      document.getElementById('btn-layers').classList.add('active');
+    }
+    satelliteOn = !satelliteOn;
+  });
+
+  // ---------- Polygons (uniform colour) ----------
+  function styleFor() {
+    return { color: '#B8587A', weight: 1.8, opacity: 0.9, fillColor: '#E89BAE', fillOpacity: 0.45 };
+  }
+  const sitesLayer = L.geoJSON(SITES, {
+    style: styleFor,
+    onEachFeature: (feature, layer) => {
+      const fid = feature.properties.fid;
+      const wrap = () => {
+        const m = siteMarkers[fid];
+        return m && m.getElement() && m.getElement().querySelector('.site-marker-wrap');
+      };
+      layer.on({
+        mouseover: e => {
+          e.target.setStyle({ weight: 3, color: '#7A2E48' });
+          const w = wrap(); if (w) w.classList.add('highlight');
+        },
+        mouseout: e => {
+          sitesLayer.resetStyle(e.target);
+          const w = wrap(); if (w) w.classList.remove('highlight');
+        },
+        click: e => openSite(feature, e.latlng),
+      });
+    }
+  }).addTo(map);
+
+  // ---------- Markers ----------
+  // 3-state bloom inference. Priority:
+  //   1. If bloom_2026 == 'blooming' (a confirmed sighting from Instagram/news/tracker), return 'confirmed'.
+  //   2. Otherwise look at the timeline: if today falls inside the typical peak window
+  //      (Apr 22–May 5 + per-site offset, plus ~7-day "petals falling" tail), return 'likely'.
+  //   3. Else return 'likely-not'.
+  function bloomState(p) {
+    // Real-world observations (from 2026 updates) outrank the forecast.
+    if (p.bloom_2026 === 'blooming') return 'confirmed';
+    if (p.bloom_2026 === 'bud') return 'likely-not';   // IG saw bud → trust it over timeline
+    // No IG observation either way: fall back to timeline forecast.
+    const offset = p.bloom_offset_days || 0;
+    const tStart = shiftDate({m:4, d:22}, offset);
+    const tEnd = shiftDate({m:5, d:5}, offset);
+    const visEnd = shiftDate(tEnd, 7);
+    const t = todayInfo();
+    const todayDoy = dayOfYear(t.y, t.m, t.d);
+    const startDoy = dayOfYear(t.y, tStart.m, tStart.d);
+    const endDoy = dayOfYear(t.y, visEnd.m, visEnd.d);
+    if (todayDoy >= startDoy && todayDoy <= endDoy) return 'likely';
+    return 'likely-not';
+  }
+  const SAKURA_SYM = {
+    confirmed: 'sakura-confirmed',
+    likely: 'sakura-likely',
+    'likely-not': 'sakura-likely-not',
+  };
+  const STATE_LABEL = {
+    confirmed: 'Bloom confirmed',
+    likely: 'Likely in bloom',
+    'likely-not': 'Likely not in bloom yet',
+  };
+  // Defensive: handle stringified arrays (QGIS sometimes serializes nested objects to strings)
+  function safeArray(v) {
+    if (!Array.isArray(v)) return [];
+    if (v.length === 0) return v;
+    if (typeof v[0] === 'string' && v[0].trim().startsWith('{')) {
+      const out = [];
+      v.forEach(s => { try { out.push(JSON.parse(s)); } catch {} });
+      return out;
+    }
+    return v;
+  }
+  function centroid(feature) {
+    const coords = [];
+    function visit(arr) {
+      if (typeof arr[0] === 'number') { coords.push(arr); return; }
+      arr.forEach(visit);
+    }
+    visit(feature.geometry.coordinates);
+    let lat = 0, lng = 0;
+    coords.forEach(([x,y]) => { lat += y; lng += x; });
+    return [lat / coords.length, lng / coords.length];
+  }
+
+  const siteCentroids = {};
+  const siteMarkers = {};
+  SITES.features.forEach(f => {
+    const [lat, lng] = centroid(f);
+    siteCentroids[f.properties.fid] = { lat, lng, feature: f };
+    const sym = SAKURA_SYM[bloomState(f.properties)];
+    const alertBadge = f.properties.alert
+      ? '<div class="site-alert-badge"><svg viewBox="0 0 8 16" fill="currentColor" aria-hidden="true"><rect x="3" y="2" width="2" height="8" rx="1"/><circle cx="4" cy="13" r="1.3"/></svg></div>'
+      : '';
+    const tooltip = `${f.properties.Name}${f.properties.alert ? ' — heads up' : ''}`;
+    const icon = L.divIcon({
+      className: '',
+      html: `<div class="site-marker-wrap" data-fid="${f.properties.fid}" title="${tooltip.replace(/"/g,'&quot;')}">
+               <svg class="site-marker" viewBox="0 0 32 32"><use href="#${sym}"/></svg>
+               ${alertBadge}
+             </div>`,
+      iconSize: [40, 40],
+      iconAnchor: [20, 20],
+    });
+    const m = L.marker([lat, lng], { icon, interactive: true, riseOnHover: true })
+      .on('click', () => openSite(f, L.latLng(lat, lng)))
+      .addTo(map);
+    siteMarkers[f.properties.fid] = m;
+  });
+
+  // Fit bounds — zoom out enough that all markers are clearly separated (no overlap).
+  const isDesktop = window.matchMedia('(min-width: 768px)').matches;
+
+  // Initial fit: pack all sites into the visible area between the panels.
+  function initialView(animate = false) {
+    const desktopNow = window.matchMedia('(min-width: 768px)').matches;
+    // On mobile, when the nearby panel is open we reserve the bottom 50vh for it so the marker cluster
+    // shows up in the top half of the screen. When it's closed, just leave a small bottom margin.
+    const nearbyOpen = document.getElementById('panel-nearby').classList.contains('open');
+    const screenH = window.innerHeight;
+    const mobileBottomPad = nearbyOpen ? Math.round(screenH * 0.5) + 20 : 100;
+    const opts = {
+      paddingTopLeft:    desktopNow ? [410, 90] : [40, 90],
+      paddingBottomRight: desktopNow ? [350, 140] : [40, mobileBottomPad],
+      maxZoom: 13,
+    };
+    if (animate) map.flyToBounds(sitesLayer.getBounds(), { ...opts, duration: 0.7 });
+    else map.fitBounds(sitesLayer.getBounds(), opts);
+  }
+  initialView(false);
+
+  // ---------- Per-site enriched content (where to see, trees, accessibility) ----------
+  const SITE_INFO = {
+    'Toronto Island Park': {
+      where: 'Cherry trees are located beside the William Meany Maze.',
+      trees: 'Trees were planted in 2011.',
+      accessibility: ['Level paved pathways to the trees', 'Accessible washrooms nearby'],
+    },
+    'Birkdale Ravine': {
+      where: 'Cherry trees are planted as a tree tunnel near the Pomeroy Street and Lyon Heights Road entrance.',
+      trees: '45 cherry trees donated by Sagamihara (Toronto\'s sister city in Japan), planted in 2015–2016.',
+      accessibility: [
+        'Sloped paved paths from Birkdale Community Centre and Brimley Road parking lot',
+        'Level paved pathway from Pomeroy Street entrance',
+        'TTC service along Ellesmere / Brimley',
+      ],
+    },
+    'Broadacres Park': {
+      where: 'Cherry trees are located in rows near the southwest corner of the park near Elderfield Crescent.',
+      trees: '100 trees planted in November 2002.',
+      accessibility: [
+        'No paved pathways to trees',
+        'Trees visible from the road',
+        'TTC bus service along Burnhamthorpe Road and The West Mall',
+      ],
+    },
+    'Cedar Ridge Park': {
+      where: 'Cherry trees are located north of Cedar Ridge Creative Centre.',
+      trees: 'Five cherry trees.',
+      accessibility: ['Interlock driveway from parking lot to tree location'],
+    },
+    'Cedarvale Park': {
+      where: 'Circular grouping of cherry trees within Cedarvale Park.',
+      trees: '',
+      accessibility: ['Paved paths near trees', 'Free parking at Phil White Arena'],
+    },
+    'Centennial Park Etobicoke': {
+      where: 'Cherry trees are located along Rathburn Road and Centennial Park Boulevard. Additional possible clusters near Centennial Park Conservatory (limited confirmation).',
+      trees: '463 trees planted between 2002–2011.',
+      accessibility: [
+        'No paved pathways',
+        'Trees visible from road',
+        'TTC service along Rathburn Road',
+        'Free parking within Centennial Park (walking distance)',
+      ],
+    },
+    'Cherry Street and Villiers Street': {
+      where: 'Cherry trees are located at the northeast corner of the intersection.',
+      trees: '45 trees planted in July 2006.',
+      accessibility: ['Paved pathways available', 'Trees visible from the road'],
+    },
+    'Edwards Gardens': {
+      where: 'Near fountain courtyard and west ravine entrance near bridal path.',
+      trees: '',
+      accessibility: [
+        'Paved pathways',
+        'Parking at Toronto Botanical Gardens (Leslie St)',
+        'TTC service on Lawrence Ave E and Leslie St',
+      ],
+    },
+    'Exhibition Place': {
+      where: 'Manitoba Dr & Canada Blvd, Princess Margaret Fountain, Yukon Place, and additional scattered trees across grounds.',
+      trees: '93 trees total (including recent plantings in 2024).',
+      accessibility: ['Paved pathways', 'Paid parking on site', 'TTC and GO transit nearby'],
+    },
+    'Japanese Canadian Cultural Centre': {
+      where: 'North, south, and east sides of parking lot (more concentrated on north side).',
+      trees: 'Planted in 2002, 2004, 2012.',
+      accessibility: [],
+    },
+    'John P. Robarts Research Library': {
+      where: 'Corner of Huron Street and Harbord Street along walking path.',
+      trees: '70 trees planted in 2005.',
+      accessibility: [],
+    },
+    'Legislative Assembly of Ontario': {
+      where: 'Around grounds of the Legislative Assembly.',
+      trees: '3 cherry trees gifted in 2005.',
+      accessibility: [],
+    },
+    'Trinity Bellwoods Park': {
+      where: 'Near central park paths.',
+      trees: '',
+      accessibility: [],
+    },
+    'University of Toronto Scarborough Campus': {
+      where: 'In front of Humanities Wing (Sakura grove).',
+      trees: '50 trees planted.',
+      accessibility: [],
+    },
+    'Woodbine Park': {
+      where: 'Along curved path next to pond (tree tunnel area, still maturing).',
+      trees: '',
+      accessibility: ['Paved pathways', 'TTC nearby'],
+    },
+    'York University': {
+      where: 'Scattered across campus.',
+      trees: '',
+      accessibility: ['Paved pathways', 'TTC service', 'Paid parking on campus'],
+    },
+    'High Park': {
+      where: 'Multiple clusters: Cherry Blossom Hill, Hillside Gardens, Picnic Site #26, Grenadier Pond east side, and High Park–Swansea area.',
+      trees: 'Multiple plantings (2017–2018 + older clusters).',
+      accessibility: [
+        'Some paved paths nearby',
+        'Cherry Hill is sloped and not directly accessible via paved path',
+        'Accessible washrooms during peak bloom',
+        'No vehicle access during peak bloom (Wheel-Trans only allowed)',
+      ],
+    },
+    'Toronto Music Garden': {
+      where: 'Above staircase area in garden.',
+      trees: '',
+      accessibility: [],
+    },
+    'Ramsden Park': {
+      where: 'Limited confirmed locations (approximate area only).',
+      trees: '',
+      accessibility: [],
+    },
+    'Front Campus, University of Toronto': {
+      where: 'Across Front Campus grounds.',
+      trees: '',
+      accessibility: [],
+    },
+  };
+
+  // ---------- Detail panel ----------
+  const panelDetail = document.getElementById('panel-detail');
+  const panelDetailContent = document.getElementById('panel-detail-content');
+  document.getElementById('panel-detail-close').addEventListener('click', closeDetail);
+  function closeDetail() {
+    currentOpenFeature = null;
+    panelDetail.classList.remove('open');
+    panelDetail.setAttribute('aria-hidden', 'true');
+    // Don't reset map view — let the user keep their current pan/zoom.
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // ---------- Bloom timeline ----------
+  // Typical recent-decade peak: Apr 22 – May 5. Shifts by per-site bloom_offset_days.
+  function dayOfYear(year, m, d) {
+    return Math.floor((Date.UTC(year, m-1, d) - Date.UTC(year, 0, 0)) / 86400000);
+  }
+  function shiftDate(p, days) {
+    const dt = new Date(Date.UTC(2026, p.m - 1, p.d + days));
+    return { m: dt.getUTCMonth() + 1, d: dt.getUTCDate() };
+  }
+  function fmtDate(p) {
+    return new Date(Date.UTC(2026, p.m - 1, p.d)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  }
+  function todayInfo() {
+    const t = new Date();
+    return { m: t.getMonth() + 1, d: t.getDate(), y: t.getFullYear(), str: t.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) };
+  }
+
+  // Bloom stages — simplified to 4 across the whole UI (timeline tooltips, report form, dots).
+  const STAGE_LABEL = {
+    bud:     'Bud',
+    partial: 'Bloom',      // default: partial → Bloom in display
+    bloom:   'Bloom',
+    fallen:  'Fallen',
+    // Legacy values still supported for old observation entries
+    first_bloom: 'Partial bloom',
+    developing:  'Bloom',
+    peak:        'Bloom',
+    falling:     'Fallen',
+    done:        'Fallen',
+  };
+  // Exceptions: these specific (site fid, date) combos keep "Partial bloom" label
+  const PARTIAL_BLOOM_EXCEPTIONS = new Set([
+    '20_2026-04-21',   // Front Campus 4.21
+    '16_2026-04-25',   // High Park 4.25
+    '16_2026-04-27',   // High Park 4.27
+  ]);
+  // Stages we plot as deep-pink dots on the timeline ("bloom sighted" days).
+  const BLOOM_STAGES = new Set(['partial', 'bloom', 'first_bloom', 'developing', 'peak']);
+
+  function timelineSvg(props) {
+    const offset = props.bloom_offset_days || 0;
+    const tStart = shiftDate({m:4, d:22}, offset);
+    const tEnd = shiftDate({m:5, d:5}, offset);
+    const visEnd = shiftDate(tEnd, 7);
+    const axisStart = {m:4, d:14};
+    const axisEnd = shiftDate({m:5, d:14}, Math.max(offset, 0));
+    const totalDays = dayOfYear(2026, axisEnd.m, axisEnd.d) - dayOfYear(2026, axisStart.m, axisStart.d);
+    const W = 320, H = 60;
+    const padX = 6;
+    const x = (p) => padX + ((dayOfYear(2026, p.m, p.d) - dayOfYear(2026, axisStart.m, axisStart.d)) / totalDays) * (W - padX*2);
+    const today = todayInfo();
+    const todayInRange = today.m >= axisStart.m && (today.m < axisEnd.m || (today.m === axisEnd.m && today.d <= axisEnd.d));
+    const tx = todayInRange ? x(today) : null;
+    const aprX = x({m:4, d:15});
+    const mayX = x({m:5, d:1});
+
+    // Bloom sighting dots — each observation that's actually a bloom sighting becomes a colored dot.
+    // bud/fallen = dark gray; bloom/partial = deep pink
+    const sightings = (props.bloom_2026_observations || [])
+      .filter(o => BLOOM_STAGES.has(o.stage) || o.stage === 'bud' || o.stage === 'fallen')
+      .map(o => {
+        const d = new Date(o.date);
+        const key = `${props.fid}_${o.date}`;
+        let displayLabel;
+        if (o.stage === 'bud') displayLabel = 'Bud';
+        else if (o.stage === 'fallen') displayLabel = 'Fallen';
+        else if (o.stage === 'partial' && PARTIAL_BLOOM_EXCEPTIONS.has(key)) displayLabel = 'Partial bloom';
+        else if (o.stage === 'first_bloom') displayLabel = 'Partial bloom';
+        else displayLabel = STAGE_LABEL[o.stage] || o.stage;
+        const isDarkStage = (o.stage === 'bud' || o.stage === 'fallen');
+        return {
+          x: x({m: d.getUTCMonth()+1, d: d.getUTCDate()}),
+          stage: o.stage,
+          label: displayLabel,
+          dateStr: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }),
+          source: o.source || '',
+          dotColor: isDarkStage ? '#5C4A53' : '#B8587A',
+        };
+      })
+      .filter(o => !isNaN(o.x))
+      .sort((a, b) => a.x - b.x);
+
+    // Build day-tick positions (one short downward tick per day inside the axis range)
+    let dayTicks = '';
+    for (let dDoy = dayOfYear(2026, axisStart.m, axisStart.d); dDoy <= dayOfYear(2026, axisEnd.m, axisEnd.d); dDoy++) {
+      const dt = new Date(Date.UTC(2026, 0, dDoy));
+      const tickX = x({m: dt.getUTCMonth() + 1, d: dt.getUTCDate()});
+      dayTicks += `<line x1="${tickX}" y1="42" x2="${tickX}" y2="46" stroke="#D9CCD0" stroke-width="0.7"/>`;
+    }
+
+    return `
+      <svg class="timeline-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+        <!-- 2-week empirical bloom band (single light gray bar) -->
+        <rect x="${x(tStart)}" y="22" width="${x(tEnd) - x(tStart)}" height="14" fill="#E8E2E5" rx="3"/>
+        <text x="${x(tStart)}" y="14" font-size="10" fill="#7A2E48" text-anchor="middle">${fmtDate(tStart)}</text>
+        <text x="${x(tEnd)}" y="14" font-size="10" fill="#7A2E48" text-anchor="middle">${fmtDate(tEnd)}</text>
+
+        <!-- Bloom sighting dots — instant custom tooltip via JS -->
+        ${sightings.map(o => `
+          <circle class="bloom-dot" cx="${o.x}" cy="29" r="4" fill="${o.dotColor}" stroke="white" stroke-width="1.4"
+                  data-tip="${escapeHtml(o.dateStr + ' · ' + o.label + (o.source ? ' · ' + o.source : ''))}"></circle>
+        `).join('')}
+
+        <line x1="${padX}" y1="42" x2="${W - padX}" y2="42" stroke="#ECDCE1" stroke-width="1"/>
+        ${dayTicks}
+        <text x="${aprX}" y="56" font-size="10" fill="#BDA9AF" text-anchor="middle">Apr</text>
+        <text x="${mayX}" y="56" font-size="10" fill="#BDA9AF" text-anchor="middle">May</text>
+
+        ${tx !== null ? `
+          <line x1="${tx}" y1="6" x2="${tx}" y2="42" stroke="#2A1F26" stroke-width="1.6" stroke-dasharray="2 2"/>
+          <circle cx="${tx}" cy="42" r="3.2" fill="#2A1F26"/>
+        ` : ''}
+      </svg>
+      ${tx !== null ? `<div class="timeline-today-label">Today is <strong>${today.str}</strong></div>` : ''}
+      <div class="timeline-legend">
+        <span class="timeline-legend-item"><span class="timeline-swatch" style="background:#E8E2E5"></span>Empirical bloom estimate</span>
+        <span class="timeline-legend-item"><span class="timeline-swatch" style="background:#B8587A;border-radius:50%;width:9px;height:9px"></span>2026 bloom sighting</span>
+        <span class="timeline-legend-item"><span class="timeline-swatch" style="background:#5C4A53;border-radius:50%;width:9px;height:9px"></span>2026 bud or fallen sighting</span>
+      </div>
+      <div style="font-size: 11px; color: var(--mist); margin-top: 4px; font-style: italic;">Hover any dot for date and source.</div>
+      <div class="timeline-disclaimer">
+        The gray band shows a typical 2-week bloom window, based on ~20 years of peak bloom records at High Park and adjusted for site-specific conditions. Pink dots are real 2026 sightings and grow as more reports come in.
+      </div>
+    `;
+  }
+
+  function renderRefSup(text, refs) {
+    // No automatic linking — descriptions come pre-clean from data and we simply display references at the bottom.
+    return text;
+  }
+
+  // Track currently open site for logo-click fit-bounds
+  let currentOpenFeature = null;
+
+  function openSite(feature, latlng) {
+    currentOpenFeature = feature;
+    const p = feature.properties;
+    const state = bloomState(p);
+    const sym = SAKURA_SYM[state];
+    const stateLabel = STATE_LABEL[state];
+    const c = siteCentroids[p.fid];
+
+    // References removed from per-site panel; global credits live in the About modal.
+
+
+    const alertHtml = p.alert
+      ? `<div class="alert">
+          <svg class="alert-icon" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="12" cy="12" r="10"/>
+            <rect x="11" y="6" width="2" height="9" rx="1" fill="white"/>
+            <circle cx="12" cy="18.5" r="1.3" fill="white"/>
+          </svg>
+          <div class="alert-body">
+            <strong>Heads up</strong>${escapeHtml(p.alert)}
+            ${p.alert_source ? `<div class="alert-source">Source: ${escapeHtml(p.alert_source)}</div>` : ''}
+          </div>
+        </div>`
+      : '';
+
+    const treesHtml = p.trees
+      ? `<div class="section"><h3>The trees</h3><p>${escapeHtml(p.trees)}</p></div>`
+      : '';
+
+    const reliability = p.reliability || 'medium';
+    const confidenceLabel = ({ high: 'High confidence', medium: 'Medium confidence', low: 'Low confidence' })[reliability];
+    // Where-to-see: use SITE_INFO if available, else fall back to feature data
+    const siteInfo = SITE_INFO[p.Name] || {};
+    const whereDesc = siteInfo.where || p.description || '';
+    const isLowerConf = (reliability === 'low' || reliability === 'medium');
+    const extentLine = isLowerConf
+      ? 'The pink area shows the approximate extent. Location is based on LIMITED publicly available information.'
+      : 'The pink area shows the approximate extent. Location is based on publicly available information.';
+    const whereParas = [];
+    if (whereDesc) whereParas.push(escapeHtml(whereDesc) + ' ' + extentLine);
+    // Long-press hint + an inline "Drop a pin" pill button (no big bottom button anymore)
+    whereParas.push(
+      `<span style="display:inline-flex;flex-wrap:wrap;align-items:center;gap:8px;">` +
+        `Long-press anywhere on the pink area to copy that exact spot's coordinates.` +
+        `<button class="ig-report-btn" id="btn-pick-${p.fid}" title="Tap a spot on the map to copy its coordinates">` +
+          `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;">` +
+            `<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>` +
+          `</svg>Drop a pin` +
+        `</button>` +
+      `</span>`
+    );
+    const whereHtml = whereParas.length
+      ? `<div class="section">
+          <h3>Where to see <span class="confidence-tag ${reliability}" title="How confident I am that this polygon matches the actual cherry blossom location">${confidenceLabel}</span></h3>
+          ${whereParas.map(t => `<p>${t}</p>`).join('')}
+        </div>`
+      : '';
+
+    // Trees — use SITE_INFO if available
+    const treesText = (siteInfo.trees !== undefined ? siteInfo.trees : p.trees) || '';
+    const treesHtmlFinal = treesText
+      ? `<div class="section"><h3>The trees</h3><p>${escapeHtml(treesText)}</p></div>`
+      : '';
+
+    // Accessibility
+    const accessList = siteInfo.accessibility || [];
+    const accessHtml = accessList.length
+      ? `<div class="section"><h3>Accessibility</h3><ul style="margin:0;padding-left:18px;font-size:15px;line-height:1.65;color:var(--ink);">${accessList.map(a => `<li>${escapeHtml(a)}</li>`).join('')}</ul></div>`
+      : '';
+
+    const igHtml = p.bloom_2026_note
+      ? `<div class="ig-block">
+          <div class="ig-header">
+            <h4>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="9"/>
+                <line x1="12" y1="8" x2="12" y2="13"/>
+                <circle cx="12" cy="16.2" r="0.8" fill="currentColor"/>
+              </svg>
+              2026 updates
+            </h4>
+            <button class="ig-report-btn" id="btn-report-${p.fid}" title="Add a 2026 sighting for this site">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              Report
+            </button>
+          </div>
+          <p>${escapeHtml(p.bloom_2026_note)}</p>
+        </div>`
+      : '';
+
+    panelDetailContent.innerHTML = `
+      <div class="panel-content">
+        <h2 class="site-title">${escapeHtml(p.Name)}</h2>
+        ${p.address ? `<p class="site-address">${escapeHtml(p.address)}</p>` : ''}
+
+        ${alertHtml}
+
+        ${igHtml}
+
+        <div class="section">
+          <h3>Bloom forecast</h3>
+          <div class="bloom-block">
+            <div class="row1">
+              <span class="bloom-status">
+                <svg width="20" height="20" viewBox="0 0 32 32"><use href="#${sym}"/></svg>
+                <span class="label">${stateLabel}</span>
+              </span>
+            </div>
+            ${timelineSvg(p)}
+          </div>
+        </div>
+
+        ${whereHtml}
+
+        ${treesHtmlFinal}
+
+        ${accessHtml}
+
+        <!-- Drop a pin button moved inline into the Where to see section above -->
+
+
+        <div class="source-line" style="text-align: center;">© 2026 Yujie Chen</div>
+      </div>
+    `;
+
+    const pickBtn = document.getElementById(`btn-pick-${p.fid}`);
+    if (pickBtn) pickBtn.addEventListener('click', () => armPick());
+    const reportBtn = document.getElementById(`btn-report-${p.fid}`);
+    if (reportBtn) reportBtn.addEventListener('click', () => {
+      populateReportSites(p.fid);
+      openModal(modalReport);
+    });
+    // Instant tooltips for bloom dots
+    const tip = document.getElementById('bloom-tip');
+    panelDetailContent.querySelectorAll('.bloom-dot').forEach(dot => {
+      dot.addEventListener('mouseenter', () => {
+        tip.textContent = dot.dataset.tip;
+        tip.classList.add('show');
+      });
+      dot.addEventListener('mousemove', e => {
+        tip.style.left = (e.clientX + 12) + 'px';
+        tip.style.top = (e.clientY + 12) + 'px';
+      });
+      dot.addEventListener('mouseleave', () => tip.classList.remove('show'));
+    });
+
+    panelDetail.classList.add('open');
+    panelDetail.setAttribute('aria-hidden', 'false');
+
+    const isDesktop = window.matchMedia('(min-width: 768px)').matches;
+    const bounds = boundsFromFeature(feature);
+    // On mobile, reserve the bottom half (50vh) for the panel so the polygon centres in the top half.
+    const screenH = window.innerHeight;
+    map.flyToBounds(bounds, {
+      paddingTopLeft:     isDesktop ? [420, 80] : [40, 80],
+      paddingBottomRight: isDesktop ? [60, 60]  : [40, Math.round(screenH * 0.5) + 20],
+      maxZoom: 18,
+      duration: 0.7,
+    });
+  }
+
+  // ---------- Sites panel (right) — always-on, A–Z by default, sortable by distance once located ----------
+  const panelNearby = document.getElementById('panel-nearby');
+  const panelNearbyContent = document.getElementById('panel-nearby-content');
+  document.getElementById('panel-nearby-close').addEventListener('click', () => {
+    panelNearby.classList.remove('open');
+    panelNearby.setAttribute('aria-hidden', 'true');
+    const allBtn = document.getElementById('btn-all'); if (allBtn) allBtn.classList.remove('active');
+  });
+  let userMarker = null;
+  let nearbySortMode = 'az';  // 'az' or 'distance'
+
+  function haversine(lat1, lng1, lat2, lng2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLng/2)**2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+  }
+
+  function renderNearbyPanel() {
+    const items = SITES.features.map(f => {
+      const c = siteCentroids[f.properties.fid];
+      const dist = userLatLng ? haversine(userLatLng.lat, userLatLng.lng, c.lat, c.lng) : null;
+      return { feature: f, dist };
+    });
+    if (nearbySortMode === 'distance' && userLatLng) {
+      items.sort((a, b) => a.dist - b.dist);
+    } else {
+      items.sort((a, b) => a.feature.properties.Name.localeCompare(b.feature.properties.Name));
+    }
+    const itemsHtml = items.map(r => {
+      const p = r.feature.properties;
+      const sym = SAKURA_SYM[bloomState(p)];
+      const distStr = r.dist != null
+        ? (r.dist < 1 ? `${Math.round(r.dist * 1000)} m` : `${r.dist.toFixed(1)} km`)
+        : '';
+      const alertDot = p.alert ? '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--warn-fg);margin-left:6px" title="Heads up"></span>' : '';
+      return `<li data-fid="${p.fid}" title="Click to view ${escapeHtml(p.Name)}; hover highlights it on the map">
+        <span class="left">
+          <svg width="22" height="22" viewBox="0 0 32 32" style="flex-shrink:0"><use href="#${sym}"/></svg>
+          <span class="nearby-name">${escapeHtml(p.Name)}${alertDot}</span>
+        </span>
+        ${distStr ? `<span class="nearby-dist">${distStr}</span>` : ''}
+      </li>`;
+    }).join('');
+
+    panelNearbyContent.innerHTML = `
+      <div class="nearby-header">
+        <h3>See All Sites</h3>
+        <div class="sub">${SITES.features.length} sites · ${userLatLng ? 'distances from your location' : 'sorted A–Z'}</div>
+        <div class="sort-toggle" role="group" aria-label="Sort sites">
+          <button class="${nearbySortMode === 'az' ? 'active' : ''}" data-sort="az" title="Sort alphabetically">A–Z</button>
+          <button class="${nearbySortMode === 'distance' ? 'active' : ''}" data-sort="distance" title="${userLatLng ? 'Sort by distance from your location' : 'Tap to use your browser location to sort by distance'}">Nearest</button>
+        </div>
+      </div>
+      <ul class="nearby-list">${itemsHtml}</ul>
+    `;
+
+    panelNearbyContent.querySelectorAll('.nearby-list li').forEach(li => {
+      const fid = parseInt(li.dataset.fid);
+      const marker = siteMarkers[fid];
+      const wrap = () => marker && marker.getElement() && marker.getElement().querySelector('.site-marker-wrap');
+      li.addEventListener('mouseenter', () => { const w = wrap(); if (w) w.classList.add('highlight'); });
+      li.addEventListener('mouseleave', () => { const w = wrap(); if (w) w.classList.remove('highlight'); });
+      li.addEventListener('click', () => {
+        const f = SITES.features.find(x => x.properties.fid === fid);
+        const c = siteCentroids[fid];
+        map.flyTo([c.lat, c.lng], 16, { duration: 0.8 });
+        setTimeout(() => openSite(f, L.latLng(c.lat, c.lng)), 400);
+      });
+    });
+    panelNearbyContent.querySelectorAll('.sort-toggle button').forEach(b => {
+      b.addEventListener('click', () => {
+        if (b.dataset.sort === 'distance' && !userLatLng) {
+          // First time hitting Nearest without a location → trigger Find me
+          findMe();
+          return;
+        }
+        nearbySortMode = b.dataset.sort;
+        renderNearbyPanel();
+      });
+    });
+  }
+
+  function findMe() {
+    if (!('geolocation' in navigator)) { showToast('Geolocation not available'); return; }
+    showToast('Finding your location…');
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const { latitude, longitude } = pos.coords;
+        userLatLng = L.latLng(latitude, longitude);
+        if (userMarker) userMarker.remove();
+        const userIcon = L.divIcon({
+          className: '', html: '<div class="user-marker" title="You are here"></div>',
+          iconSize: [20, 20], iconAnchor: [10, 10],
+        });
+        userMarker = L.marker([latitude, longitude], { icon: userIcon, zIndexOffset: 500 }).addTo(map);
+        nearbySortMode = 'distance';
+        renderNearbyPanel();
+      },
+      err => showToast(err.code === 1 ? 'Location permission denied' : 'Could not get location'),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
+
+  // Desktop: nearby panel starts closed; pill is shown instead.
+  // Mobile: also starts closed.
+  renderNearbyPanel();
+  // Right Sakura Sites panel starts closed on both desktop and mobile.
+  // User opens it via the ALL button in the toolbar.
+
+  // ---------- Map point picker ----------
+  // Triggers: right-click (desktop), long-press (touch), or "Pick on map" panel button.
+  // On any of these, copy the coords to clipboard and show a popup with paste links.
+  let pickArmed = false;  // when true, the next single click acts as a pick
+
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); return true; }
+    catch {
+      const ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      const ok = (() => { try { return document.execCommand('copy'); } catch { return false; } })();
+      document.body.removeChild(ta);
+      return ok;
+    }
+  }
+
+  async function pickPoint(latlng) {
+    const lat = latlng.lat, lng = latlng.lng;
+    const coordStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    const copied = await copyText(coordStr);
+    if (copied) showToast('Coordinates copied · paste in any maps app');
+
+    let distLine = '';
+    if (userLatLng) {
+      const km = haversine(userLatLng.lat, userLatLng.lng, lat, lng);
+      const d = km < 1 ? `${Math.round(km*1000)} m` : `${km.toFixed(1)} km`;
+      distLine = `<div style="margin: 8px 0 0; font-size: 12px; color: var(--ink-soft);"><strong style="color:var(--ink);">${d}</strong> from your location</div>`;
+    }
+    // Maps URLs use ?q= so the picked point shows as a pin (not auto-snapped to nearby roads / parks)
+    const gMaps = `https://www.google.com/maps/search/?api=1&query=${lat.toFixed(6)},${lng.toFixed(6)}`;
+    const aMaps = `https://maps.apple.com/?q=${lat.toFixed(6)},${lng.toFixed(6)}`;
+
+    const html = `
+      <div style="font-family: 'Inter', system-ui, sans-serif; font-size: 13px; min-width: 220px;">
+        <div style="font-family: 'Cormorant Garamond', serif; color: var(--sakura-700); font-weight: 600; font-size: 17px; margin-bottom: 4px;">Picked spot</div>
+        <div style="color: var(--ink-soft); font-size: 12px; font-variant-numeric: tabular-nums; margin-bottom: 6px;">${escapeHtml(coordStr)}</div>
+        <div style="font-size: 12px; color: ${copied ? 'var(--sakura-700)' : 'var(--warn-fg)'};">
+          ${copied ? '✓ Copied — paste into your favourite maps app' : 'Couldn\'t auto-copy — long-press the coords above to copy manually'}
+        </div>
+        <div style="display:flex; gap:6px; margin-top: 10px;">
+          <a href="${gMaps}" target="_blank" rel="noopener" title="Open this exact spot in Google Maps"
+             style="flex:1; text-align:center; background: var(--sakura-500); color: white; padding: 7px 10px; border-radius: 999px; text-decoration: none; font-size: 12px; font-weight: 500;">Google Maps</a>
+          <a href="${aMaps}" target="_blank" rel="noopener" title="Open this exact spot in Apple Maps"
+             style="flex:1; text-align:center; background: white; color: var(--sakura-700); border: 1px solid var(--sakura-200); padding: 6px 10px; border-radius: 999px; text-decoration: none; font-size: 12px; font-weight: 500;">Apple Maps</a>
+        </div>
+        ${distLine}
+      </div>
+    `;
+    L.popup({ maxWidth: 280, className: 'coord-popup' })
+      .setLatLng(latlng)
+      .setContent(html)
+      .openOn(map);
+    pickArmed = false;
+    document.body.style.cursor = '';
+  }
+
+  // Right-click on desktop
+  map.on('contextmenu', e => pickPoint(e.latlng));
+
+  // Long-press on touch — Leaflet doesn't fire contextmenu on long-press reliably,
+  // so we roll our own with touchstart/touchend timers on the map container.
+  (function setupLongPress(){
+    const el = map.getContainer();
+    let timer = null, start = null;
+    const LONG_PRESS_MS = 500, MOVE_THRESHOLD = 12;
+    el.addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0];
+      start = { x: t.clientX, y: t.clientY };
+      timer = setTimeout(() => {
+        timer = null;
+        // Convert client xy → latlng
+        const rect = el.getBoundingClientRect();
+        const point = L.point(start.x - rect.left, start.y - rect.top);
+        const latlng = map.containerPointToLatLng(point);
+        pickPoint(latlng);
+      }, LONG_PRESS_MS);
+    }, { passive: true });
+    el.addEventListener('touchmove', (e) => {
+      if (!timer || !start) return;
+      const t = e.touches[0];
+      if (Math.abs(t.clientX - start.x) > MOVE_THRESHOLD || Math.abs(t.clientY - start.y) > MOVE_THRESHOLD) {
+        clearTimeout(timer); timer = null;
+      }
+    }, { passive: true });
+    el.addEventListener('touchend', () => {
+      if (timer) { clearTimeout(timer); timer = null; }
+      start = null;
+    });
+    el.addEventListener('touchcancel', () => {
+      if (timer) { clearTimeout(timer); timer = null; }
+      start = null;
+    });
+  })();
+
+  // Single-click pick mode (armed by panel button)
+  map.on('click', e => {
+    if (pickArmed) pickPoint(e.latlng);
+  });
+
+  function armPick() {
+    pickArmed = true;
+    document.body.style.cursor = 'crosshair';
+    showToast('Tap any spot on the map to pick it');
+  }
+  // Drop-a-pin removed from toolbar; long-press on map and the inline pill in the panel still work.
+
+  // ---------- Modals (About / Report / Contact) ----------
+  const modal = document.getElementById('modal');
+  const modalReport = document.getElementById('modal-report');
+  const modalContact = document.getElementById('modal-contact');
+  const modalBg = document.getElementById('modal-bg');
+
+  function closeAllModals() {
+    [modal, modalReport, modalContact].forEach(m => m.classList.remove('open'));
+    modalBg.classList.remove('open');
+  }
+  function openModal(m) { closeAllModals(); m.classList.add('open'); modalBg.classList.add('open'); }
+
+  document.getElementById('btn-about').addEventListener('click', () => openModal(modal));
+  document.getElementById('btn-contact').addEventListener('click', () => openModal(modalContact));
+  document.getElementById('btn-report').addEventListener('click', () => {
+    populateReportSites();
+    openModal(modalReport);
+  });
+  modalBg.addEventListener('click', closeAllModals);
+  document.getElementById('report-cancel').addEventListener('click', closeAllModals);
+  document.getElementById('contact-cancel').addEventListener('click', closeAllModals);
+
+  function closeModal() { closeAllModals(); }
+  function closeReport() { closeAllModals(); }
+  function closeContact() { closeAllModals(); }
+  window.closeModal = closeModal;
+  window.closeReport = closeReport;
+  window.closeContact = closeContact;
+
+  // Populate the site dropdown in the Report form (alphabetical)
+  function populateReportSites(presetFid) {
+    const sel = modalReport.querySelector('select[name="site"]');
+    const sites = SITES.features.slice().sort((a, b) => a.properties.Name.localeCompare(b.properties.Name));
+    sel.innerHTML = '<option value="">Choose a site…</option><option value="__other__">— somewhere else (describe in notes) —</option>'
+      + sites.map(f => `<option value="${f.properties.fid}">${escapeHtml(f.properties.Name)}</option>`).join('');
+    if (presetFid != null) sel.value = String(presetFid);
+    // Default the date to today
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    modalReport.querySelector('input[name="date"]').value = `${yyyy}-${mm}-${dd}`;
+  }
+
+  // Report form: type toggle (sighting / issue) — show/hide the relevant field
+  modalReport.querySelectorAll('.sort-toggle button[data-rtype]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      modalReport.querySelectorAll('.sort-toggle button[data-rtype]').forEach(b => b.classList.toggle('active', b === btn));
+      const rtype = btn.dataset.rtype;
+      modalReport.querySelector('input[name="type"]').value = rtype;
+      modalReport.querySelectorAll('[data-only]').forEach(el => {
+        el.style.display = (el.dataset.only === rtype) ? '' : 'none';
+      });
+      // Toggle required attribute on the active field
+      modalReport.querySelector('select[name="stage"]').required = (rtype === 'sighting');
+      modalReport.querySelector('textarea[name="issue"]').required = (rtype === 'issue');
+    });
+  });
+
+  // Report form submit → mailto (subject + body adapt to type)
+  document.getElementById('report-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const fid = fd.get('site');
+    const f = SITES.features.find(x => String(x.properties.fid) === fid);
+    const siteName = f ? f.properties.Name : (fid === '__other__' ? 'Other / not on this map' : 'Unknown');
+    const rtype = fd.get('type') || 'sighting';
+    const isIssue = rtype === 'issue';
+    const subject = `[Toronto Sakura] ${isIssue ? 'Heads-up' : 'Bloom'} report: ${siteName} on ${fd.get('date')}`;
+    const lines = [
+      `Type: ${isIssue ? 'Heads-up / issue' : 'Bloom sighting'}`,
+      `Site: ${siteName}`,
+      `Date: ${fd.get('date')}`,
+    ];
+    if (isIssue) {
+      lines.push(`Issue: ${fd.get('issue') || '(none described)'}`);
+    } else {
+      lines.push(`Stage: ${fd.get('stage')}`);
+    }
+    lines.push(`Reporter: ${fd.get('name') || '(anonymous)'}`);
+    lines.push('', 'Notes / source:', fd.get('notes') || '(none)', '', '. Sent from the Toronto Sakura map.');
+    window.location.href = `mailto:yujiechenca@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines.join('\n'))}`;
+    showToast('Opening your email app. Review then send.');
+  });
+
+  // Contact form submit → mailto (your email client adds your address as the sender automatically)
+  document.getElementById('contact-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const subject = `[Toronto Sakura] Message from ${fd.get('name')}`;
+    const lines = [
+      `From: ${fd.get('name')}`,
+      '',
+      fd.get('message'),
+      '',
+      '— Sent from the Toronto Sakura map'
+    ];
+    window.location.href = `mailto:yujiechenca@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines.join('\n'))}`;
+    showToast('Opening your email app — review then send');
+  });
+
+  // ---------- Toast ----------
+  function showToast(msg, ms=2400) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => t.classList.remove('show'), ms);
+  }
+
+  // ---------- First-run hint ----------
+  setTimeout(() => {
+    const h = document.getElementById('hint');
+    h.classList.add('show');
+    setTimeout(() => h.classList.remove('show'), 4000);
+  }, 600);
+
+  // Brand logo click:
+  //   • If a site panel is open → flyToBounds that site's polygon
+  //   • Otherwise → zoom to all sites (maxZoom 11 so nothing overlaps)
+  function boundsFromFeature(feature) {
+    // Collect all [lng, lat, ?] leaf coordinate arrays from MultiPolygon / Polygon
+    const pts = [];
+    function walk(arr) {
+      if (typeof arr[0] === 'number') { pts.push(arr); return; }
+      arr.forEach(walk);
+    }
+    walk(feature.geometry.coordinates);
+    const lats = pts.map(p => p[1]);
+    const lngs = pts.map(p => p[0]);
+    return L.latLngBounds(
+      [Math.min(...lats), Math.min(...lngs)],
+      [Math.max(...lats), Math.max(...lngs)]
+    );
+  }
+
+  document.getElementById('btn-fit-bounds').addEventListener('click', () => {
+    const isDesktopNow = window.matchMedia('(min-width: 768px)').matches;
+    if (currentOpenFeature) {
+      const bounds = boundsFromFeature(currentOpenFeature);
+      map.flyToBounds(bounds, {
+        paddingTopLeft:    isDesktopNow ? [420, 80] : [40, 80],
+        paddingBottomRight: isDesktopNow ? [360, 60] : [40, 60],
+        maxZoom: 18,
+        duration: 0.6,
+      });
+    } else {
+      initialView(true);
+    }
+  });
+
+  // ALL toolbar button → open nearby panel AND zoom to city-wide initial view
+  document.getElementById('btn-all').addEventListener('click', () => {
+    panelNearby.classList.add('open');
+    panelNearby.setAttribute('aria-hidden', 'false');
+    document.getElementById('btn-all').classList.add('active');
+    initialView(true);
+  });
+
+  // ESC closes panels and modal
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      closeDetail(); closeModal();
+      panelNearby.classList.remove('open');
+      const allBtn = document.getElementById('btn-all'); if (allBtn) allBtn.classList.remove('active');
+    }
+  });
+
+  // ---------- Mobile: swipe down on a panel to close it ----------
+  // Drag the panel down past a threshold and it closes. Snap back if the drag is too short.
+  function attachSwipeDown(panel, onClose, scrollableInner) {
+    let startY = null;
+    let dragging = false;
+    let dy = 0;
+    const HANDLE_THRESHOLD = 90;  // px to drag before close commits
+    panel.addEventListener('touchstart', (e) => {
+      if (!window.matchMedia('(max-width: 767px)').matches) return;
+      if (!panel.classList.contains('open')) return;
+      // Only start the drag if the touch is on the panel itself (not deep inside a scrollable list)
+      // — we use the top ~80px (header / handle area) for grabbing.
+      const rect = panel.getBoundingClientRect();
+      const localY = e.touches[0].clientY - rect.top;
+      // Allow drag from any point if panel is at scrollTop=0 (lets the user fling-close)
+      const scrollEl = scrollableInner || panel;
+      if (localY > 80 && scrollEl.scrollTop > 0) return;
+      startY = e.touches[0].clientY;
+      dragging = true;
+      dy = 0;
+      panel.style.transition = 'none';
+    }, { passive: true });
+    panel.addEventListener('touchmove', (e) => {
+      if (!dragging) return;
+      dy = e.touches[0].clientY - startY;
+      if (dy < 0) dy = 0;  // can't drag up past the open position
+      panel.style.transform = `translateY(${dy}px)`;
+    }, { passive: true });
+    panel.addEventListener('touchend', () => {
+      if (!dragging) return;
+      dragging = false;
+      panel.style.transition = '';
+      panel.style.transform = '';
+      if (dy > HANDLE_THRESHOLD) onClose();
+      dy = 0;
+    });
+    panel.addEventListener('touchcancel', () => {
+      dragging = false;
+      panel.style.transition = '';
+      panel.style.transform = '';
+      dy = 0;
+    });
+  }
+  attachSwipeDown(panelDetail, closeDetail, document.getElementById('panel-detail-content'));
+  attachSwipeDown(panelNearby, () => {
+    panelNearby.classList.remove('open');
+    panelNearby.setAttribute('aria-hidden', 'true');
+    const allBtn = document.getElementById('btn-all'); if (allBtn) allBtn.classList.remove('active');
+  }, document.getElementById('panel-nearby-content'));
+</script>
+</body>
+</html>
