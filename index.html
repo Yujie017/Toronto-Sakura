@@ -1072,7 +1072,7 @@
     <li><strong>Bloom forecast and 2026 sightings.</strong> Each site shows a typical 2-week bloom window, derived from about 20 years of peak-bloom records at High Park Nature Centre, adjusted for site-specific conditions and 2026 sighting reports.</li>
     <li>The 2026 timeline marks each reported sighting as a dot: pink for days the trees were seen in bloom, gray for bud or fallen petal sightings. Hover any dot to see the date and source. Sightings come from publicly shared photos and posts, and you can submit your own through the Report button.</li>
     <li><strong>Where to see and accessibility info</strong>, drawn from public sources.</li>
-    <li><strong>DROP A PIN</strong> — tap the button in the Where to see section, or long-press anywhere on the map, to copy coordinates and open the spot in Google Maps, Apple Maps, or any maps app.</li>
+    <li><strong>Copy coordinates</strong> — on mobile, long-press anywhere on the map; on desktop, right-click. Either way copies the coordinates so you can open the spot in Google Maps, Apple Maps, or any maps app.</li>
     <li><strong>Report a sighting or issue.</strong> Spotted a tree blooming, or noticed a closure or access problem? Submit through the Report button in the panel and I'll add it to the map.</li>
   </ul>
 
@@ -1693,15 +1693,9 @@
       : 'The pink area shows the approximate extent. Location is based on publicly available information.';
     const whereParas = [];
     if (whereDesc) whereParas.push(escapeHtml(whereDesc) + ' ' + extentLine);
-    // Long-press hint + an inline "DROP A PIN" pill button (no big bottom button anymore)
     whereParas.push(
       `<span style="display:inline-flex;flex-wrap:wrap;align-items:center;gap:8px;">` +
-        `Tap DROP A PIN to mark a spot and copy its coordinates, or long-press anywhere on the pink area directly.` +
-        `<button class="ig-report-btn" id="btn-pick-${p.fid}" title="Tap a spot on the map to copy its coordinates">` +
-          `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;">` +
-            `<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>` +
-          `</svg>DROP A PIN` +
-        `</button>` +
+        `On mobile, long-press anywhere on the pink area. On desktop, right-click. Either way copies the coordinates so you can open the spot in any maps app.` +
         `<button class="ig-report-btn" id="btn-accuracy-${p.fid}" title="Report a location inaccuracy">` +
           `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;">` +
             `<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>` +
@@ -1765,15 +1759,12 @@
 
         ${accessHtml}
 
-        <!-- DROP A PIN button moved inline into the Where to see section above -->
 
 
         <div class="source-line" style="text-align: center;">© 2026 Yujie Chen</div>
       </div>
     `;
 
-    const pickBtn = document.getElementById(`btn-pick-${p.fid}`);
-    if (pickBtn) pickBtn.addEventListener('click', () => armPick());
     const accuracyBtn = document.getElementById(`btn-accuracy-${p.fid}`);
     if (accuracyBtn) accuracyBtn.addEventListener('click', () => openAccuracyModal(p.fid, p.Name));
     const reportBtn = document.getElementById(`btn-report-${p.fid}`);

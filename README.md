@@ -24,7 +24,7 @@ Instead of dropping a single point per location, each site is outlined as a **po
 
 **Satellite toggle** — Switch between street map and satellite imagery to scout the terrain before visiting.
 
-**DROP A PIN** — Tap the button in the site panel, or long-press anywhere on the map (right-click on desktop), to copy coordinates and open the spot in any maps app.
+**Copy coordinates** — On mobile, long-press anywhere on the map; on desktop, right-click. Either way copies the coordinates so you can open the spot in any maps app.
 
 **Report a sighting** — Spotted a tree blooming or noticed a closure? Submit via the Report button; sightings are reviewed and added to the map.
 
