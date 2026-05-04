@@ -1,63 +1,58 @@
-# Toronto Sakura · Cherry Blossom Map
+# Toronto Sakura — Field Map
 
-An interactive field map of cherry blossom sites across the City of Toronto. Built to help people find and navigate sakura spots during the short spring bloom window.
-
-**[→ View the map](https://yujie017.github.io/Toronto-Sakura/)** 
+An interactive map of cherry blossom viewing sites across Toronto, with hand-drawn polygon viewing zones, 2026 bloom sightings, and per-site timeline forecasts.
 
 ---
 
-## What makes this different from a pin map
+## What's on the map
 
-Instead of dropping a single point per location, each site is outlined as a **polygon viewing zone** — so you can see where the trees actually are and plan how to move through larger parks like High Park or Centennial Park.
+- **Polygon viewing zones** drawn from satellite imagery, street view, and on-the-ground photos — showing exactly where the trees are clustered, not just a pin
+- **2026 bloom status** for each site, updated from publicly shared photos and posts
+- **Per-site timeline** showing a 2-week forecast window and dated sighting dots
+- **Heads-up alerts** for sites with closures, construction, or restricted parking
+- **Accessibility info** for each site
 
-## Features
+## Bloom status icons
 
-**Bloom status** — Each sakura icon is colour-coded by status for the current season: deep pink for confirmed bloom (from a verified 2026 sighting), light pink for likely in bloom based on the typical peak window, and grey for likely not yet in bloom.
+| Icon | Status | Meaning |
+|------|--------|---------|
+| Deep pink flower | Bloom (70%+ open) | Peak bloom, confirmed by a 2026 sighting |
+| Light pink flower | Partial bloom | Flowers opening, not yet at peak |
+| Flower + green leaf | Late bloom | Winding down, green leaves visible |
+| Green leaf | Leaves | Petals mostly gone |
+| Grey flower | Buds | Not yet open |
+| White flower | No data | No confirmed sighting yet |
 
-**Bloom forecast timeline** — Each site panel shows a two-week typical peak window derived from ~20 years of records at High Park Nature Centre, adjusted per site and incorporating 2026 sighting data.
+## Timeline dot colours
 
-**Heads-up alerts** — Sites with construction, closures, or restricted access are flagged with an orange badge in both the map and the site panel.
+| Colour | Stage |
+|--------|-------|
+| Dark grey | Bud |
+| Light pink | Partial bloom |
+| Deep pink | Bloom (70%+ open) |
+| Light green | Late bloom |
+| Dark green | Leaves |
 
-**All sites list** — Tap ALL in the toolbar to see all 20 sites in one list. Sort A–Z or by nearest after enabling location.
+## How bloom status is determined
 
-**Site detail panel** — Click any site to see its bloom forecast, 2026 sightings, where-to-see notes, accessibility info, and links to Google Maps and Apple Maps.
+1. **Latest observation** in `bloom_2026_observations` takes precedence
+2. Manual `bloom_2026` field as fallback
+3. Timeline position: before/within the estimated bloom window → No data; after the window → Not in bloom
 
-**Satellite toggle** — Switch between street map and satellite imagery to scout the terrain before visiting.
+Bloom stage definitions adapted from [Sakura in High Park](https://www.sakurainhighpark.com/trackers-stages).
 
-**Copy coordinates** — On mobile, long-press anywhere on the map; on desktop, right-click. Either way copies the coordinates so you can open the spot in any maps app.
+## Data sources
 
-**Report a sighting** — Spotted a tree blooming or noticed a closure? Submit via the Report button; sightings are reviewed and added to the map.
-
-## Coverage
-
-20 sites total: 17 from the [City of Toronto's official cherry blossom page](https://www.toronto.ca/explore-enjoy/festivals-events/cherry-blossoms/), plus 3 additional sites confirmed through public photos and on-the-ground sources (Ramsden Park, Toronto Music Garden, Front Campus at U of T).
-
-## How the polygons were made
-
-Each polygon was manually traced to approximate the cherry tree viewing area. Sources used: City of Toronto site descriptions, satellite imagery (Google Maps and Google Earth including historical imagery), Google Street View, and publicly available photos, videos, and articles. Open tree datasets and LiDAR canopy layers were reviewed but not used as primary sources.
+- Viewing area boundaries: satellite imagery, street view, community photos
+- 2026 sightings: publicly shared Instagram, Reddit, Facebook, and Google Reviews posts
+- Bloom timing window: ~20 years of High Park peak bloom records via the [High Park Nature Centre](https://highparknaturecentre.com/cherry-blossom-tracking/), adjusted per site
+- Site descriptions: [City of Toronto cherry blossoms page](https://www.toronto.ca/explore-enjoy/festivals-events/cherry-blossoms/)
+- Basemap: OpenStreetMap contributors + CARTO; satellite © Esri and partners
 
 ## Tech
 
-- [Leaflet](https://leafletjs.com/) for the map
-- [OpenStreetMap](https://www.openstreetmap.org/copyright) + [CARTO](https://carto.com/attributions) basemap
-- Satellite imagery © [Esri](https://www.esri.com) and partners
-- Bloom timing references: [High Park Nature Centre cherry blossom tracker](https://highparknaturecentre.com/cherry-blossom-tracking/)
-- Single self-contained HTML file — no build step, no backend
-
-## Deployment
-
-The map is a single `index.html` file with all data embedded. To host it yourself, upload `index.html` to any static hosting service:
-
-- **GitHub Pages** — push to a repo and enable Pages in Settings
-- **Netlify** — drag and drop the file at netlify.com
-- **Cloudflare Pages** — connect a repo or upload directly
-
-## Disclaimer
-
-Pink shaded areas are approximate outlines, not precise tree locations. Trees may not cover the entire shaded area, and some trees at a site may fall outside it. The bloom forecast is an estimate based on historical records and may not reflect actual conditions in any given year.
+Single-file HTML — Leaflet.js for the map, embedded GeoJSON, no build step.
 
 ## Credits
 
-Data collection, mapping, and design by Yujie Chen. Website built with assistance from AI tools.
-
-Viewing area boundaries and 2026 bloom sightings are both based on publicly available photos, posts, satellite imagery, and community trackers. Many thanks to the Toronto cherry blossom community.
+Data collection, mapping, and design: Yujie Chen. Built with AI assistance.
